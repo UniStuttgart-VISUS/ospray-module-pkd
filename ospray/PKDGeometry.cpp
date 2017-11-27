@@ -20,6 +20,7 @@
 #include "ospray/common/Model.h"
 // ispc exports
 #include "PKDGeometry_ispc.h"
+#include "dllexport.h"
 
 namespace ospray {
   using std::endl;
@@ -174,7 +175,7 @@ namespace ospray {
 
 } // ::ospray
 
-extern "C" void ospray_init_module_pkd() 
+extern "C" OSPRAY_PKD_EXPORT void ospray_init_module_pkd()
 {
   std::cout << "#osp:pkd: loading 'pkd' module" << std::endl;
 }
