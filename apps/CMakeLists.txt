@@ -42,7 +42,7 @@ OSPRAY_CREATE_APPLICATION(PartiKD
   LINK
   ospray
   ospray_common
-  ospray_xml
+  #ospray_xml
   ${LIBS}
 )
 
