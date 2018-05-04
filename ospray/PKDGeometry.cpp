@@ -43,11 +43,12 @@ namespace ospray {
     }
 
   
-  vec3f PartiKDGeometry::getParticle(size_t i) const 
+  vec4f PartiKDGeometry::getParticle(size_t i) const 
   {
     switch(format) {
-    case OSP_FLOAT3: return particle3f[i];
-    case OSP_ULONG: return decodeParticle(particle1ul[i]);
+    case OSP_FLOAT4: return particle4f[i];
+    case OSP_FLOAT3: return vec4f(particle3f[i], 1.0f);
+    case OSP_ULONG: return vec4f(decodeParticle(particle1ul[i]), 1.0f);
     default: NOTIMPLEMENTED;
     };
   }
@@ -58,7 +59,8 @@ namespace ospray {
   {
     box3f b = empty;
     for (size_t i=0;i<numParticles;i++) {
-      b.extend(getParticle(i));
+      auto pt = getParticle(i);
+      b.extend(vec3f(pt.x, pt.y, pt.z));
     }
     return b;
   }
@@ -96,6 +98,7 @@ namespace ospray {
     particle     = particleData->data;
     numParticles = particleData->numItems;
     format = particleData->type;
+    bool isVec4 = format == OSP_FLOAT4;
     bool isQuantized = format == OSP_ULONG;
     PRINT(isQuantized);
     const box3f centerBounds = getBounds();
@@ -107,6 +110,8 @@ namespace ospray {
     }
 
     bool useSPMD = getParam1i("useSPMD",0);
+
+    int colorType = getParam1i("colorType", 0);
 
     particleRadius = getParamf("radius",0.f);
     if (particleRadius <= 0.f)
@@ -157,10 +162,14 @@ namespace ospray {
 #endif
 
 
+
+    cout << "#osp:pkd: ColorType: " << colorType << endl;
+    cout << "#osp:pkd: isVec4: " << isVec4 << endl;
+
     // -------------------------------------------------------
     // actually create the ISPC-side geometry now
     // -------------------------------------------------------
-    ispc::PartiKDGeometry_set(getIE(),model->getIE(),isQuantized,useSPMD,
+    ispc::PartiKDGeometry_set(getIE(),model->getIE(),isQuantized,useSPMD,isVec4,colorType,
                               transferFunction?transferFunction->getIE():NULL,
                               particleRadius,
                               numParticles,

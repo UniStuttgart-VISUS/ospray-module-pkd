@@ -32,6 +32,25 @@
 #include "ColorMask.h"
 #endif
 
+vec4f decodeColor(float colorCode, uniform int colorType, uniform PartiKDGeometry *uniform THIS) {
+  unsigned int *color_code = (unsigned int *)(&colorCode);
+  if (colorType == 1 || colorType == 3) {
+    float r = (color_code[0] & 0x000f) / 255.0f;
+    float g = ((color_code[0] >> 8) & 0x000f) / 255.0f;
+    float b = ((color_code[0] >> 16) & 0x000f) / 255.0f;
+    return make_vec4f(r, g, b, 1.0f);
+  } else if (colorType == 2 || colorType == 4) {
+    float r = (color_code[0] >> 24) / 255.0f;
+    float g = ((color_code[0] >> 16) & 0x000f) / 255.0f;
+    float b = ((color_code[0] >> 8) & 0x000f) / 255.0f;
+    float a = (color_code[0] & 0x000f) / 255.0f;
+    return make_vec4f(r, g, b, a);
+  } else if (colorType == 5) {
+    return make_vec4f(THIS->transferFunction->getColorForValue(THIS->transferFunction, colorCode), 1.0f);
+  }
+  return make_vec4f(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
                                           uniform Model *uniform model,
                                           varying DifferentialGeometry &dg,
@@ -63,7 +82,7 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
   }
 #else
   if ((flags & DG_COLOR) && THIS->attribute != NULL &&
-      THIS->transferFunction != NULL) {
+      THIS->transferFunction != NULL && !THIS->isVec4) {
 #if 1
     uniform float *uniform attribArray = THIS->attribute;
     const uniform float attrib_lo      = THIS->attr_lo;
@@ -86,11 +105,34 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
     //   %\n",
     //         attrib_org,attrib,primID64,ray.primID,attrib_lo,attrib_hi);
     // compute alpha value from attribute value
+
     const float alpha = THIS->transferFunction->getOpacityForValue(
         THIS->transferFunction, attrib);
     const vec3f color = THIS->transferFunction->getColorForValue(
         THIS->transferFunction, attrib);
     dg.color = make_vec4f(color.x, color.y, color.z, alpha);
+
+    //if (!THIS->isVec4) {
+    //  const float alpha = THIS->transferFunction->getOpacityForValue(
+    //    THIS->transferFunction, attrib);
+    //  const vec3f color = THIS->transferFunction->getColorForValue(
+    //    THIS->transferFunction, attrib);
+    //  //dg.color = make_vec4f(color.x, color.y, color.z, alpha);
+    //   dg.color = make_vec4f(0.0f, 1.0f, 0.0f, 1.0f);
+    //} else {
+    //  if (THIS->colorType != 0) {
+    //    uniform PKDParticle4 *uniform particle_array = (PKDParticle4 *)THIS->particle;
+    //    PKDParticle4 particle_org;
+    //    foreach_unique(pID in primID64) {
+    //      uniform PKDParticle4 *uniform ptr = particle_array + pID;
+    //      particle_org = ptr[0];
+    //    }
+    //    dg.color = decodeColor(particle_org.position[3], THIS->colorType, THIS);
+    //    dg.color = make_vec4f(0.0f, 0.0f, 1.0f, 1.0f);
+    //  } else {
+    //    dg.color = make_vec4f(1.0f, 0.0f, 0.0f, 1.0f);
+    //  }
+    //}
 #else
     foreach_unique(upper64 in ray.primID_hi64)
     {
@@ -126,7 +168,27 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
     }
 #endif
   }
+  
 #endif
+  if ((flags & DG_COLOR) && THIS->isVec4) {
+      if (THIS->colorType != 0) {
+          uniform PKDParticle4 *uniform particle_array = (PKDParticle4 *)THIS->particle;
+          PKDParticle4 particle_org;
+          uint64 primID64 = (uint32)ray.primID_hi64;
+          primID64 <<= 32;
+          primID64 += (uint32)ray.primID;
+          foreach_unique(pID in primID64) {
+              uniform PKDParticle4 *uniform ptr = particle_array + pID;
+              particle_org = ptr[0];
+          }
+          dg.color = decodeColor(particle_org.position[3], THIS->colorType, THIS);
+          //dg.color = make_vec4f(0.0f, 0.0f, 1.0f, 1.0f);
+      } else {
+          dg.color = make_vec4f(1.0f, 0.0f, 0.0f, 1.0f);
+      }
+  }
+
+  //dg.color = make_vec4f(1.0f, 1.0f, 0.0f, 1.0f);
 }
 
 void PartiKDGeometry_bounds(uniform PartiKDGeometry *uniform geometry,
@@ -177,6 +239,8 @@ export void PartiKDGeometry_set(void *uniform _geom,
                                 void *uniform _model,
                                 uniform bool isQuantized,
                                 uniform bool useSPMD,
+                                uniform bool isVec4,
+                                uniform int colorType,
                                 void *uniform transferFunction,
                                 float uniform particleRadius,
                                 uniform uint64 numParticles,
@@ -197,6 +261,8 @@ export void PartiKDGeometry_set(void *uniform _geom,
 
   geom->geometry.model          = model;
   geom->isQuantized             = isQuantized;
+  geom->isVec4                  = isVec4;
+  geom->colorType               = colorType;
   geom->geometry.geomID         = geomID;
   geom->particleRadius          = particleRadius;
   geom->particle                = particle;

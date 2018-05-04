@@ -32,6 +32,10 @@ struct PKDParticle {
   float position[3];
 };
 
+struct PKDParticle4 {
+    float position[4];
+};
+
 struct INT3 {
   int32 x,y,z;
 };
@@ -43,6 +47,12 @@ struct PartiKDGeometry {
 
   //! flag specifying whether this is a quantized version of the particles
   bool isQuantized;
+
+  //! flag specifying that color is encoded in the fourth position component
+  bool isVec4;
+
+  //! specifies type of color: o none, 1 RGBu8, 2 RGBAu8, 3 RGBf, 4 RGBAf, 5 I
+  int colorType;
 
   //! number of particles
   uint64 numParticles;
@@ -157,6 +167,14 @@ inline void getParticle(PartiKDGeometry *uniform self,
     p.pos[0] = ix;
     p.pos[1] = iy;
     p.pos[2] = iz;
+  } else if (self->isVec4) {
+    const uniform int64 offset = 4*primID;
+    const uniform float *uniform pos = &self->particle[0].position[0];
+    pos += offset;
+    p.dim = ((int *uniform)pos)[0] & 3;
+    p.pos[0] = pos[0];
+    p.pos[1] = pos[1];
+    p.pos[2] = pos[2];
   } else {
     const uniform int64 offset = 3*primID;
     const uniform float *uniform pos = &self->particle[0].position[0];
