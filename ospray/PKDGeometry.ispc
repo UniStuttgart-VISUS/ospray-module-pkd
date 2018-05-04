@@ -51,6 +51,25 @@ vec4f decodeColor(float colorCode, uniform int colorType, uniform PartiKDGeometr
   return make_vec4f(0.0f, 0.0f, 0.0f, 0.0f);
 }
 
+vec4f decodeColorInt(unsigned int colorCode, uniform int colorType, uniform PartiKDGeometry *uniform THIS) {
+  if (colorType == 1 || colorType == 3) {
+    float r = ((float)((colorCode >> 24) & 0xff)) / 255.0f;
+    float g = ((float)((colorCode >> 16) & 0xff)) / 255.0f;
+    float b = ((float)((colorCode >> 8) & 0xff)) / 255.0f;
+    return make_vec4f(r, g, b, 1.0f);
+  } else if (colorType == 2 || colorType == 4) {
+    float r = ((float)((colorCode >> 24) & 0xff)) / 255.0f;
+    float g = ((float)((colorCode >> 16) & 0xff)) / 255.0f;
+    float b = ((float)((colorCode >> 8) & 0xff)) / 255.0f;
+    float a = ((float)(colorCode & 0xff)) / 255.0f;
+    return make_vec4f(r, g, b, a);
+  } else if (colorType == 5) {
+    float color = ((float)colorCode) / 255.0f;
+    return make_vec4f(THIS->transferFunction->getColorForValue(THIS->transferFunction, colorCode), 1.0f);
+  }
+  return make_vec4f(0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
                                           uniform Model *uniform model,
                                           varying DifferentialGeometry &dg,
@@ -181,7 +200,7 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
               uniform PKDParticle4 *uniform ptr = particle_array + pID;
               particle_org = ptr[0];
           }
-          dg.color = decodeColor(particle_org.position[3], THIS->colorType, THIS);
+          dg.color = decodeColorInt(particle_org.color, THIS->colorType, THIS);
           //dg.color = make_vec4f(0.0f, 0.0f, 1.0f, 1.0f);
       } else {
           dg.color = make_vec4f(1.0f, 0.0f, 0.0f, 1.0f);

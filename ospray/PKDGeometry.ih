@@ -33,7 +33,8 @@ struct PKDParticle {
 };
 
 struct PKDParticle4 {
-    float position[4];
+    float position[3];
+    unsigned int color;
 };
 
 struct INT3 {
