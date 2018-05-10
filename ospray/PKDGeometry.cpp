@@ -101,8 +101,17 @@ namespace ospray {
     bool isVec4 = format == OSP_FLOAT4;
     bool isQuantized = format == OSP_ULONG;
     PRINT(isQuantized);
-    const box3f centerBounds = getBounds();
-    
+    //const box3f _centerBounds = getBounds(); //< TODO unnecessary work
+
+    Ref<Data> bboxData = getParamData("bbox");
+    float const* bbox = reinterpret_cast<float const*>(bboxData->data);
+    vec3f const lower(bbox[0], bbox[1], bbox[2]);
+    vec3f const upper(bbox[3], bbox[4], bbox[5]);
+    box3f const centerBounds(lower, upper);
+
+    /*PRINT(_centerBounds);
+    PRINT(centerBounds);*/
+
     attributeData = getParamData("attribute",NULL);
     transferFunction = (TransferFunction*)getParamObject("transferFunction",NULL);
     if (transferFunction) {
