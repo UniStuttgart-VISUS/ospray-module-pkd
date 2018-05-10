@@ -35,15 +35,15 @@
 vec4f decodeColor(float colorCode, uniform int colorType, uniform PartiKDGeometry *uniform THIS) {
   unsigned int *color_code = (unsigned int *)(&colorCode);
   if (colorType == 1 || colorType == 3) {
-    float r = (color_code[0] & 0x000f) / 255.0f;
-    float g = ((color_code[0] >> 8) & 0x000f) / 255.0f;
-    float b = ((color_code[0] >> 16) & 0x000f) / 255.0f;
+    float r = (color_code[0] & 0xff) / 255.0f;
+    float g = ((color_code[0] >> 8) & 0xff) / 255.0f;
+    float b = ((color_code[0] >> 16) & 0xff) / 255.0f;
     return make_vec4f(r, g, b, 1.0f);
   } else if (colorType == 2 || colorType == 4) {
     float r = (color_code[0] >> 24) / 255.0f;
-    float g = ((color_code[0] >> 16) & 0x000f) / 255.0f;
-    float b = ((color_code[0] >> 8) & 0x000f) / 255.0f;
-    float a = (color_code[0] & 0x000f) / 255.0f;
+    float g = ((color_code[0] >> 16) & 0xff) / 255.0f;
+    float b = ((color_code[0] >> 8) & 0xff) / 255.0f;
+    float a = (color_code[0] & 0xff) / 255.0f;
     return make_vec4f(r, g, b, a);
   } else if (colorType == 5) {
     return make_vec4f(THIS->transferFunction->getColorForValue(THIS->transferFunction, colorCode), 1.0f);
@@ -53,12 +53,12 @@ vec4f decodeColor(float colorCode, uniform int colorType, uniform PartiKDGeometr
 
 vec4f decodeColorInt(unsigned int colorCode, uniform int colorType, uniform PartiKDGeometry *uniform THIS) {
   if (colorType == 1 || colorType == 3) {
-    float r = ((float)((colorCode >> 24) & 0xff)) / 255.0f;
+    float r = ((float)(colorCode >> 24)) / 255.0f;
     float g = ((float)((colorCode >> 16) & 0xff)) / 255.0f;
     float b = ((float)((colorCode >> 8) & 0xff)) / 255.0f;
     return make_vec4f(r, g, b, 1.0f);
   } else if (colorType == 2 || colorType == 4) {
-    float r = ((float)((colorCode >> 24) & 0xff)) / 255.0f;
+    float r = ((float)(colorCode >> 24)) / 255.0f;
     float g = ((float)((colorCode >> 16) & 0xff)) / 255.0f;
     float b = ((float)((colorCode >> 8) & 0xff)) / 255.0f;
     float a = ((float)(colorCode & 0xff)) / 255.0f;
