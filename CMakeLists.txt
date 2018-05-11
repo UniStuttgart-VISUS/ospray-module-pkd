@@ -21,7 +21,7 @@ OPTION(OSPRAY_MODULE_PKD_ISPV "Build PKD-module in-situ particle vis service" OF
 
 IF (OSPRAY_MODULE_PARTIKD)
   IF (OSPRAY_MODULE_PARTIKD_LIDAR)
-	SET(PARTIKD_LIDAR_ENABLED 1)
+	  SET(PARTIKD_LIDAR_ENABLED 1)
   ELSE()
     SET(PARTIKD_LIDAR_ENABLED 0)
   ENDIF()
@@ -43,6 +43,7 @@ IF (OSPRAY_MODULE_PARTIKD)
     #ospray/render/PKDSplatter.cpp
     LINK
     ospray
+    ospray_module_ispc
   )
   # ------------------------------------------------------------
 
