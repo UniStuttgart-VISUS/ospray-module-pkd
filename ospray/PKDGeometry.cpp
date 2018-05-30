@@ -103,11 +103,18 @@ namespace ospray {
     PRINT(isQuantized);
     //const box3f _centerBounds = getBounds(); //< TODO unnecessary work
 
+    box3f centerBounds;
+
     Ref<Data> bboxData = getParamData("bbox");
-    float const* bbox = reinterpret_cast<float const*>(bboxData->data);
-    vec3f const lower(bbox[0], bbox[1], bbox[2]);
-    vec3f const upper(bbox[3], bbox[4], bbox[5]);
-    box3f const centerBounds(lower, upper);
+    if (bboxData) {
+      float const* bbox = reinterpret_cast<float const*>(bboxData->data);
+      vec3f const lower(bbox[0], bbox[1], bbox[2]);
+      vec3f const upper(bbox[3], bbox[4], bbox[5]);
+      centerBounds = box3f(lower, upper);
+    } else {
+      cout << "#osp:pkd: Need to re-calculate bounds" << endl;
+      centerBounds = getBounds();
+    }
 
     /*PRINT(_centerBounds);
     PRINT(centerBounds);*/

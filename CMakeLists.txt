@@ -42,7 +42,7 @@ IF (OSPRAY_MODULE_PARTIKD)
     #ospray/render/PKDSplatter.ispc
     #ospray/render/PKDSplatter.cpp
     LINK
-    ospray
+    #ospray
     ospray_module_ispc
   )
   # ------------------------------------------------------------
