@@ -18,6 +18,7 @@
 #include "PKDConfig.h"
 // ospray
 #include "ospray/common/Model.h"
+#include "ospray/common/OSPCommon.h"
 // ispc exports
 #include "PKDGeometry_ispc.h"
 #include "dllexport.h"
@@ -30,7 +31,6 @@ namespace ospray {
   PartiKDGeometry::PartiKDGeometry()
     : particleRadius(.02f)
   {
-    PING;
     ispcEquivalent = ispc::PartiKDGeometry_create(this);
   }
 
@@ -200,7 +200,7 @@ namespace ospray {
 
 } // ::ospray
 
-extern "C" OSPRAY_PKD_EXPORT void ospray_init_module_pkd()
+extern "C" OSPRAY_DLLEXPORT void ospray_init_module_pkd() 
 {
   std::cout << "#osp:pkd: loading 'pkd' module" << std::endl;
 }

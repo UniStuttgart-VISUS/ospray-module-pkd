@@ -25,9 +25,7 @@
 #include "PKDConfig.h"
 #include "PKDGeometry.ih"
 // embree
-#include "embree2/rtcore.isph"
-#include "embree2/rtcore_geometry_user.isph"
-#include "embree2/rtcore_scene.isph"
+#include "geometry/Geometry.ih"
 #if PARTIKD_LIDAR_ENABLED
 #include "ColorMask.h"
 #endif
@@ -210,12 +208,11 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
   //dg.color = make_vec4f(1.0f, 1.0f, 0.0f, 1.0f);
 }
 
-void PartiKDGeometry_bounds(uniform PartiKDGeometry *uniform geometry,
-                            uniform size_t primID,
-                            uniform box3fa &bbox)
+unmasked void PartiKDGeometry_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
-  bbox =
-      make_box3fa(geometry->sphereBounds.lower, geometry->sphereBounds.upper);
+  uniform PartiKDGeometry *uniform geom = (uniform PartiKDGeometry *uniform)args->geometryUserPtr;
+  box3fa *uniform out = (box3fa *uniform)args->bounds_o;
+  *out = make_box3fa(geom->sphereBounds.lower, geom->sphereBounds.upper);
 }
 
 /*! creates a new pkd geometry */
@@ -276,52 +273,49 @@ export void PartiKDGeometry_set(void *uniform _geom,
       (uniform PartiKDGeometry * uniform) _geom;
   uniform Model *uniform model = (uniform Model * uniform) _model;
 
-  uniform uint32 geomID = rtcNewUserGeometry(model->embreeSceneHandle, 1);
-
-  geom->geometry.model          = model;
-  geom->isQuantized             = isQuantized;
-  geom->isVec4                  = isVec4;
-  geom->colorType               = colorType;
-  geom->geometry.geomID         = geomID;
-  geom->particleRadius          = particleRadius;
-  geom->particle                = particle;
-  geom->numParticles            = numParticles;
-  geom->numInnerNodes           = numInnerNodes;
-  geom->centerBounds            = centerBounds;
-  geom->sphereBounds            = sphereBounds;
-  geom->attribute               = attribute;
-  geom->attr_lo                 = attr_lo;
-  geom->attr_hi                 = attr_hi;
+  RTCGeometry embreeGeom = rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_USER);
+  uniform uint32 geomID = rtcAttachGeometry(model->embreeSceneHandle, embreeGeom);
+  
+  geom->geometry.model  = model;
+  geom->isQuantized     = isQuantized;
+  geom->isVec4          = isVec4;
+  geom->colorType       = colorType;
+  geom->geometry.geomID = geomID;
+  geom->particleRadius  = particleRadius;
+  geom->particle        = particle;
+  geom->numParticles    = numParticles;
+  geom->numInnerNodes   = numInnerNodes;
+  geom->centerBounds    = centerBounds;
+  geom->sphereBounds    = sphereBounds;
+  geom->attribute       = attribute;
+  geom->attr_lo         = attr_lo;
+  geom->attr_hi         = attr_hi;
   geom->innerNode_attributeMask = innerNode_attributeMask;
-  print("array of inner-node attribute masks: %\n", innerNode_attributeMask);
+  print("array of inner-node attribute masks: %\n",innerNode_attributeMask);
 
-  geom->transferFunction = (TransferFunction * uniform) transferFunction;
+  geom->transferFunction = (TransferFunction *uniform)transferFunction;
+  if (transferFunction)  {
+    PartiKDGeometry_updateTransferFunction(geom, transferFunction);
+  }
 
-  rtcSetUserData(model->embreeSceneHandle, geomID, geom);
-  rtcSetBoundsFunction(model->embreeSceneHandle,
-                       geomID,
-                       (uniform RTCBoundsFunc)&PartiKDGeometry_bounds);
+  rtcSetGeometryUserData(embreeGeom, geom);
+  rtcSetGeometryUserPrimitiveCount(embreeGeom, 1);
+  rtcSetGeometryBoundsFunction(embreeGeom,
+      (uniform RTCBoundsFunction)&PartiKDGeometry_bounds, geom);
 
   if (useSPMD) {
     print("creating PKD with ***SPMD*** traversal\n");
-    rtcSetIntersectFunction(
-        model->embreeSceneHandle,
-        geomID,
-        (uniform RTCIntersectFuncVarying)&PartiKDGeometry_intersect_spmd);
-    rtcSetOccludedFunction(
-        model->embreeSceneHandle,
-        geomID,
-        (uniform RTCOccludedFuncVarying)&PartiKDGeometry_occluded_spmd);
+    rtcSetGeometryIntersectFunction(embreeGeom,
+        (uniform RTCIntersectFunctionN)&PartiKDGeometry_intersect_spmd);
+    rtcSetGeometryOccludedFunction(embreeGeom,
+        (uniform RTCOccludedFunctionN)&PartiKDGeometry_occluded_spmd);
   } else {
-    rtcSetIntersectFunction(
-        model->embreeSceneHandle,
-        geomID,
-        (uniform RTCIntersectFuncVarying)&PartiKDGeometry_intersect_packet);
-    rtcSetOccludedFunction(
-        model->embreeSceneHandle,
-        geomID,
-        (uniform RTCOccludedFuncVarying)&PartiKDGeometry_occluded_packet);
+    rtcSetGeometryIntersectFunction(embreeGeom,
+        (uniform RTCIntersectFunctionN)&PartiKDGeometry_intersect_packet);
+    rtcSetGeometryOccludedFunction(embreeGeom,
+        (uniform RTCOccludedFunctionN)&PartiKDGeometry_occluded_packet);
   }
-  if (transferFunction)
-    PartiKDGeometry_updateTransferFunction(geom, transferFunction);
+  rtcCommitGeometry(embreeGeom);
+  rtcReleaseGeometry(embreeGeom);
 }
+

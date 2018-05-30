@@ -23,11 +23,6 @@
 #include "transferFunction/LinearTransferFunction.ih"
 // this module
 #include "PKDConfig.h"
-#include "PKDGeometry.ih"
-// embree
-#include "embree2/rtcore.isph"
-#include "embree2/rtcore_geometry_user.isph"
-#include "embree2/rtcore_scene.isph"
 
 // uniform int rayID = 0;
 
@@ -408,17 +403,34 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
 }
 
 /*! the 'virtual' traverse function for a pkd geometry */
-void PartiKDGeometry_intersect_packet(uniform PartiKDGeometry *uniform self,
-                                      varying Ray &ray,
-                                      uniform size_t primID)
+unmasked void PartiKDGeometry_intersect_packet(const struct RTCIntersectFunctionNArguments *uniform args)
 {
-  pkd_traverse_packet(self, ray, primID, false);
+  if (!args->valid[programIndex]) {
+    return;
+  }
+  // this assumes that the args->rayhit is actually a pointer toa varying ray!
+  varying Ray *uniform ray = (varying Ray *uniform)args->rayhit;
+  uniform PartiKDGeometry *uniform self = (uniform PartiKDGeometry *uniform)args->geometryUserPtr;
+
+  pkd_traverse_packet(self, *ray, args->primID, false);
+  if (ray->primID == args->primID) {
+    ray->instID = args->context->instID[0];
+  }
 }
 
 /*! the 'virtual' occluded function for a pkd geometry */
-void PartiKDGeometry_occluded_packet(uniform PartiKDGeometry *uniform self,
-                                     varying Ray &ray,
-                                     uniform size_t primID)
+unmasked void PartiKDGeometry_occluded_packet(const struct RTCIntersectFunctionNArguments *uniform args)
 {
-  pkd_traverse_packet(self, ray, primID, true);
+  if (!args->valid[programIndex]) {
+    return;
+  }
+  // this assumes that the args->rayhit is actually a pointer toa varying ray!
+  varying Ray *uniform ray = (varying Ray *uniform)args->rayhit;
+  uniform PartiKDGeometry *uniform self = (uniform PartiKDGeometry *uniform)args->geometryUserPtr;
+
+  pkd_traverse_packet(self, *ray, args->primID, true);
+  if (ray->primID == args->primID) {
+    ray->instID = args->context->instID[0];
+  }
 }
+
