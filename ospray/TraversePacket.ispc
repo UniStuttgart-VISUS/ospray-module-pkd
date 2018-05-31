@@ -23,6 +23,7 @@
 #include "transferFunction/LinearTransferFunction.ih"
 // this module
 #include "PKDConfig.h"
+#include "PKDGeometry.ih"
 
 // uniform int rayID = 0;
 
