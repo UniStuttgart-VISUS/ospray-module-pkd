@@ -106,6 +106,7 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
     const uniform float attrib_hi      = THIS->attr_hi;
 
     float attrib_org;
+#if PRIMID64
     uint64 primID64 = (uint32)ray.primID_hi64;
     primID64 <<= 32;
     primID64 += (uint32)ray.primID;
@@ -114,42 +115,22 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
       uniform float *uniform ptr = attribArray + pID;
       attrib_org                 = ptr[0];
     }
-
-    const float attrib =
-        (attrib_org - attrib_lo) * rcp(attrib_hi - attrib_lo + 1e-10f);
-    // if (attrib >= 1.f || attrib <= 0.f)
-    //   print("ATTRIB OUT OF RANGE:\n org %\n remapped %\n ID %:%\n range %
-    //   %\n",
+#else
+    attrib_org = attribArray[ray.primID];
+#endif
+      
+    const float attrib
+      = (attrib_org - attrib_lo)
+      * rcp(attrib_hi - attrib_lo + 1e-10f);
+    // if (attrib >= 1.f || attrib <= 0.f) 
+    //   print("ATTRIB OUT OF RANGE:\n org %\n remapped %\n ID %:%\n range % %\n",
     //         attrib_org,attrib,primID64,ray.primID,attrib_lo,attrib_hi);
     // compute alpha value from attribute value
-
-    const float alpha = THIS->transferFunction->getOpacityForValue(
-        THIS->transferFunction, attrib);
-    const vec3f color = THIS->transferFunction->getColorForValue(
-        THIS->transferFunction, attrib);
-    dg.color = make_vec4f(color.x, color.y, color.z, alpha);
-
-    //if (!THIS->isVec4) {
-    //  const float alpha = THIS->transferFunction->getOpacityForValue(
-    //    THIS->transferFunction, attrib);
-    //  const vec3f color = THIS->transferFunction->getColorForValue(
-    //    THIS->transferFunction, attrib);
-    //  //dg.color = make_vec4f(color.x, color.y, color.z, alpha);
-    //   dg.color = make_vec4f(0.0f, 1.0f, 0.0f, 1.0f);
-    //} else {
-    //  if (THIS->colorType != 0) {
-    //    uniform PKDParticle4 *uniform particle_array = (PKDParticle4 *)THIS->particle;
-    //    PKDParticle4 particle_org;
-    //    foreach_unique(pID in primID64) {
-    //      uniform PKDParticle4 *uniform ptr = particle_array + pID;
-    //      particle_org = ptr[0];
-    //    }
-    //    dg.color = decodeColor(particle_org.position[3], THIS->colorType, THIS);
-    //    dg.color = make_vec4f(0.0f, 0.0f, 1.0f, 1.0f);
-    //  } else {
-    //    dg.color = make_vec4f(1.0f, 0.0f, 0.0f, 1.0f);
-    //  }
-    //}
+    const float alpha = THIS->transferFunction->getOpacityForValue(THIS->transferFunction,
+                                                                   attrib);
+    const vec3f color = THIS->transferFunction->getColorForValue(THIS->transferFunction,
+                                                                 attrib);
+    dg.color = make_vec4f(color.x,color.y,color.z,1.0);
 #else
     foreach_unique(upper64 in ray.primID_hi64)
     {
@@ -291,6 +272,8 @@ export void PartiKDGeometry_set(void *uniform _geom,
   geom->attr_lo         = attr_lo;
   geom->attr_hi         = attr_hi;
   geom->innerNode_attributeMask = innerNode_attributeMask;
+  geom->epsilon = geom->particleRadius / 100.0;
+
   print("array of inner-node attribute masks: %\n",innerNode_attributeMask);
 
   geom->transferFunction = (TransferFunction *uniform)transferFunction;

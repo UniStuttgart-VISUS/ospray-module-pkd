@@ -14,11 +14,13 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
-#undef NDEBUG
-
+#include <memory>
 #include "PKD.h"
 #include "ospcommon/xml/XML.h"
-
+#include "common/sg/importer/Importer.h"
+#include "common/sg/transferFunction/TransferFunction.h"
+#include "common/sg/common/Common.h"
+#include "ospcommon/xml/XML.h"
 #include "ospcommon/constants.h"
 
 namespace ospray {
@@ -35,233 +37,126 @@ namespace ospray {
       PING;
     }
 
-#if 0
-    PKDGeometry::~PKDGeometry() 
+
+    box3f PKDGeometry::bounds() const
     {
-      for (int i=0;i<attribute.size();i++) delete attribute[i]; 
-      if (ospGeometry) { ospRelease(ospGeometry); ospGeometry = NULL; }
-    }
 
-    //! return bounding box of this node (in local space)
-    box3f PKDGeometry::getBounds() 
-    {
-      box3f bounds = ospcommon::EmptyTy();
-      for (size_t i=0;i<numParticles;i++)
-        bounds.extend(getParticle(i));
-      bounds.lower -= vec3f(radius);
-      bounds.upper += vec3f(radius);
-      return bounds;
-    }
-
-    void PKDGeometry::render(RenderContext &ctx)
-    {
-      assert(!ospGeometry);
-
-      // check if the data has changed at all
-      if (lastModified <= lastCommitted) 
-        // ... and return if not
-        return;
-
-      // if no geometry exists, create it.
-      if (!ospGeometry) {
-        // make sure the module is loaded
-        // ospLoadModule("alpha_spheres");
-        ospLoadModule("pkd");
-
-        // and create the geometry
-        if (useOldAlphaSpheresCode) {
-          cout << "USING ALPHA-SPHERES" << endl;
-          ospGeometry = ospNewGeometry("alpha_spheres");
-        } else {
-          ospGeometry = ospNewGeometry("pkd_geometry");
-        }
-
-        if (!ospGeometry)
-          throw std::runtime_error("#osp:sg:PKDGeometry: could not create ospray 'pkd_geometry'");
-        assert(ospGeometry);
-
-        // assign a default material (for now.... eventually we might
-        // want to do a 'real' material
-        OSPMaterial mat = ospNewMaterial(ctx.integrator?ctx.integrator->getOSPHandle():NULL,"default");
-        if (mat) {
-          vec3f kd(.7f);
-          vec3f ks(.3f);
-          ospSet3fv(mat,"kd",&kd.x);
-          ospSet3fv(mat,"ks",&ks.x);
-          ospSet1f(mat,"Ns",99.f);
-          ospCommit(mat);
-        }
-
-
-        ospSetMaterial(ospGeometry,mat);
-
-        // and finally, add this geometry to the model
-        ospAddGeometry(ctx.world->ospModel,ospGeometry);
-      }
-      
-      // if true, we're forcing a immediate paging-in of all data
-      // (otherwise the data is only mmap'ed and paged in on demand)
-      bool forcePageIn = true;
-        
-      // create the particle array
-      if (!ospPositionData) {
-        if (numParticles == 0)
-          throw std::runtime_error("osp:sg:PKDGeometry: no 'position' data defined in PKD geometry");
-
-        size_t numPositionBytes;
-        if (format == OSP_FLOAT3) {
-          ospPositionData = ospNewData(numParticles,OSP_FLOAT3,particle3f,
-                                       OSP_DATA_SHARED_BUFFER);
-          numPositionBytes = sizeof(vec3f)*numParticles;
-        } else {
-          ospPositionData = ospNewData(numParticles,OSP_ULONG,particle3f,
-                                       OSP_DATA_SHARED_BUFFER);
-          numPositionBytes = sizeof(long long)*numParticles;
-        }
-        ospCommit(ospPositionData);
-        ospSetData(ospGeometry,"position",ospPositionData);
-        
-        cout << "#osp:pkd: numbytes for raw p-k-d tree: " << numPositionBytes << endl;
-        if (forcePageIn) {
-          cout << "#osp:pkd: FORCED page-in of entire position array" << endl;
-          madvise(particle3f,numPositionBytes,MADV_WILLNEED);
-        }
-      }
-      
-      // check if transfer function exists, and is updated
-      if (!transferFunction) {
-        ospSetObject(ospGeometry,"transferFunction",NULL);
-    } else {
-        transferFunction->render(ctx);
-        if (transferFunction->getLastCommitted() >= this->lastCommitted) 
-          ospSetObject(ospGeometry,"transferFunction",transferFunction->getOSPHandle());
-      }
-
-      // assign attribute, if available - we use the first attribute for now
-      if (!attribute.empty()) {
-        if (attribute[0]->ospData == NULL) {
-          attribute[0]->ospData = ospNewData(numParticles,OSP_FLOAT,attribute[0]->value,
-                                             OSP_DATA_SHARED_BUFFER);
-          ospSetData(ospGeometry,"attribute",attribute[0]->ospData);
-          size_t numAttributeBytes = sizeof(float)*numParticles;
-          cout << "#osp:pkd: numbytes for particle attribute: " << numAttributeBytes << endl;
-          if (forcePageIn) {
-            cout << "#osp:pkd: FORCED page-in of entire attribute array" << endl;
-            madvise(attribute[0]->value,numParticles*sizeof(float),MADV_WILLNEED);
+      box3f box = empty;
+      if (hasChild("position")) {
+        auto pos = child("position").nodeAs<DataBuffer>();
+        if (pos->getType() == OSP_FLOAT3) {
+          for (size_t i = 0; i < pos->size(); ++i) {
+            box.extend(pos->get<vec3f>(i));
+          }
+        } else if (pos->getType() == OSP_ULONG) {
+          for (size_t i = 0; i < pos->size(); ++i) {
+            const uint64_t p = pos->get<uint64_t>(i);
+            box.extend(decodeParticle(p));
           }
         }
       }
-
-      // set the particle radius - right now we have a fixed radius for all particles
-      if (radius == 0)
-        std::cout << "#osp:sg:pkd: warning - radius is 0" << std::endl;
-      else {
-        assert(radius > 0.f);
-        ospSet1f(ospGeometry,"radius",radius);
+      if (hasChild("radius")) {
+        const float radius = child("radius").valueAs<float>();
+        box.lower -= vec3f(radius);
+        box.upper += vec3f(radius);
       }
-      ospCommit(ospGeometry);
-      lastCommitted = TimeStamp::now();
+      return box;
     }
 
-    vec3f decodeParticle(size_t i) {
-      size_t mask = (1<<20)-1;
-      size_t ix = (i>> 2)&mask;
-      size_t iy = (i>>22)&mask;
-      size_t iz = (i>>42)&mask;
-      return vec3f(ix,iy,iz);
+    vec3f PKDGeometry::decodeParticle(uint64_t i) const {
+      const uint64_t mask = (1 << 20) - 1;
+      const uint64_t ix = (i >> 2) & mask;
+      const uint64_t iy = (i >> 22) & mask;
+      const uint64_t iz = (i >> 42) & mask;
+      return vec3f(ix, iy, iz);
     }
 
-    vec3f PKDGeometry::getParticle(size_t i) const 
+    void PKDGeometry::postCommit(RenderContext &)
     {
-      switch(format) {
-      case OSP_FLOAT3: return particle3f[i];
-      case OSP_ULONG: return decodeParticle(particle1ul[i]);
-      default: NOTIMPLEMENTED;
-      };
+      auto geom = valueAs<OSPGeometry>();
+      ospSetObject(geom, "transferFunction",
+                   child("transferFunction").valueAs<OSPTransferFunction>());
+      ospCommit(geom);
     }
 
-    //! \brief Initialize this node's value from given corresponding XML node 
-    void PKDGeometry::setFromXML(const xml::Node *const node, const unsigned char *binBasePtr)
+    void importPKD(std::shared_ptr<Node> world, const ospcommon::FileName fileName)
     {
-      std::string tfcnName = node->getProp("transferFunction");
-      if (!tfcnName.empty()) {
-        transferFunction = dynamic_cast<sg::TransferFunction*>(sg::findNamedNode(tfcnName));
+      std::cout << "Loading PKDGeometry from " << fileName << std::endl;
+
+      // Read the radius from the XML file
+      // Map the binary file and hand it off to the PKDGeometry node
+      // as a shared data pointer.
+      // We then also need to make a transfer function in the case that the
+      // data has attributes
+      auto doc = xml::readXML(fileName);
+      const std::string binFileName = fileName.str() + "bin";
+      unsigned char *binBasePtr = const_cast<unsigned char*>(mapFile(binFileName));
+      if (!binBasePtr) {
+        std::cout << "Failed to load corresponding pkdbin file for " << fileName.str() << "\n";
+        throw std::runtime_error("Failed to load corresponding pkdbin file for "
+                                  + fileName.str());
       }
-      for (size_t childID=0;childID<node->child.size();childID++) {
-        xml::Node *child = node->child[childID];
-        if (child->name == "position") {
-          numParticles = child->getPropl("count");
-          std::string format = child->getProp("format");
+      auto geom = createNode(fileName.str(), "PKDGeometry")->nodeAs<PKDGeometry>();
+
+      const xml::Node &pkdNode = doc->child[0].child[0];
+      if (pkdNode.name != "PKDGeometry") {
+        std::cout << "failed to find PKDGeometry child node\n";
+        throw std::runtime_error("failed to find PKDGeometry child node");
+      }
+      for (const xml::Node &e : pkdNode.child) {
+        // TODO: How are attributes stored again? I forgot, need to fix
+        // the converter and make some examples
+        if (e.name == "position") {
+          const std::string format = e.getProp("format");
+          const size_t offset = std::stoull(e.getProp("ofs"));
+          const size_t count = std::stoull(e.getProp("count"));
           if (format == "vec3f" || format == "float3") {
-            particle3f = (vec3f*)(binBasePtr+child->getPropl("ofs"));
-            this->format = OSP_FLOAT3;
+            std::cout << "Loading uncompressed PKD\n";
+            auto posData = std::make_shared<DataArray3f>(reinterpret_cast<vec3f*>(binBasePtr + offset), count, false);
+            posData->setName("position");
+            geom->add(posData);
+          } else if (format == "uint64") {
+            std::cout << "Loading quantized PKD\n";
+            auto posData = std::make_shared<DataArrayT<uint64_t, OSP_ULONG>>(
+                reinterpret_cast<uint64_t*>(binBasePtr + offset), count, false);
+            posData->setName("position");
+            geom->add(posData);
+          }
+        } else if (e.name == "radius") {
+          geom->createChild("radius", "float", std::stof(e.content));
+        } else if (e.name == "attribute") {
+          std::cout << "Got attribute" << e.getProp("name") << "\n";
+          const std::string format = e.getProp("format");
+          const size_t offset = std::stoull(e.getProp("ofs"));
+          const size_t count = std::stoull(e.getProp("count"));
+          if (format == "float") {
+            auto attribData = std::make_shared<DataArray1f>(reinterpret_cast<float*>(binBasePtr + offset), count, false);
+            attribData->setName("attribute");
+            geom->add(attribData);
           } else {
-            std::cout << "#osp:sg:PKDGeometry: found " << numParticles
-                      << " QUANTIZED particles." << endl;
-            particle1ul = (uint64_t*)(binBasePtr+child->getPropl("ofs"));
-            this->format = OSP_ULONG;
+            std::cout << "Unsupported attribute type: " << format << "\n";
           }
-          particleBounds = getBounds();
-          std::cout << "#osp:sg:PKDGeometry: found " << numParticles
-                    << " particles, bounds=" << particleBounds << std::endl;
-          continue;
-        } 
-
-        if (child->name == "useOldAlphaSpheresCode") {
-          useOldAlphaSpheresCode = child->getPropl("value");
-          if (useOldAlphaSpheresCode) std::cout << "#osp:sg:PKDGeometry: SWITCHING TO OLD ALPHA-SPHERES CODE" << std::endl;
-          continue;
-        } 
-      
-        if (child->name == "radius") {
-          radius = atof(child->content.c_str());
-          std::cout << "#osp:sg:PKDGeometry: found radius " << radius << std::endl;
-          continue;
-        } 
-      
-        if (child->name == "attribute") {
-          Attribute *attrib = new Attribute;
-          attrib->name = child->getProp("name");
-          size_t count = child->getPropl("count");
-          attrib->value = (float *)(binBasePtr+child->getPropl("ofs"));
-          attrib->minValue = attrib->maxValue = attrib->value[0];
-          for (size_t i=0;i<count;i++) {
-            attrib->minValue = std::min(attrib->minValue,attrib->value[i]);
-            attrib->maxValue = std::max(attrib->maxValue,attrib->value[i]);
-          }
-          std::cout << "#osp:sg:PKDGeometry: found attribute '"+attrib->name+"' (" << attrib->minValue << ":" << attrib->maxValue << ")" << std::endl;
-          attribute.push_back(attrib);
-          continue;
         }
-
-        std::cout << "#osp:sg:PKDGeometry: Warning - unknown child field type '" << child->name << "'" << std::endl;
+      }
+      if (geom->hasChild("attribute")) {
+        auto tfn = createNode("transferFunction", "TransferFunction")->nodeAs<TransferFunction>();
+        // Start with everything opaque in the data (show all particles)
+        tfn->child("alpha").nodeAs<DataVector2f>()->v[0].y = 1;
+        geom->add(tfn);
       }
 
-      if (!attribute.empty() && !transferFunction) {
-        std::cout << "#osp:sg:PKDGeometry: Warning - PKD has attributes, but no transfer function... creating one." << std::endl;
-        transferFunction = new TransferFunction();
-      }
-    }
+      auto materials = geom->child("materialList").nodeAs<MaterialList>();
+      materials->item(0)["d"]  = 1.f;
+      materials->item(0)["Kd"] = vec3f(1.f);
+      materials->item(0)["Ks"] = vec3f(0.2f);
 
-
-    //! set radius to use for the spheres
-    void PKDGeometry::setRadius(const float radius)
-    { 
-      this->radius = radius; 
-      lastModified = TimeStamp::now(); 
+      world->add(geom);
     }
-
-    //! set transferFunction to use for the spheres
-    void PKDGeometry::setTransferFunction(Ref<sg::TransferFunction> transferFunction)
-    { 
-      this->transferFunction = transferFunction; 
-      lastModified = TimeStamp::now(); 
-    }
-#endif
 
     OSP_REGISTER_SG_NODE(PKDGeometry);
 
+    OSPSG_REGISTER_IMPORT_FUNCTION(importPKD, pkd);
+
   } // ::ospray::sg
 } // ::ospray
-
 
