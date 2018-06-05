@@ -110,7 +110,7 @@ namespace ospray {
       vec3f const upper(bbox[3], bbox[4], bbox[5]);
       centerBounds = box3f(lower, upper);
     } else {
-      cout << "#osp:pkd: Need to re-calculate bounds" << endl;
+      std::cout << "#osp:pkd: Need to re-calculate bounds" << std::endl;
       centerBounds = getBounds();
     }
 
@@ -184,8 +184,8 @@ namespace ospray {
     std::cout << "Bounds: " << sphereBounds << "\n";
 
 
-    cout << "#osp:pkd: ColorType: " << colorType << endl;
-    cout << "#osp:pkd: isVec4: " << isVec4 << endl;
+    std::cout << "#osp:pkd: ColorType: " << colorType << std::endl;
+    std::cout << "#osp:pkd: isVec4: " << isVec4 << std::endl;
 
     // -------------------------------------------------------
     // actually create the ISPC-side geometry now
