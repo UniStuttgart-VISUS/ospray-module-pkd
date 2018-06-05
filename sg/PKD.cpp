@@ -33,9 +33,7 @@ namespace ospray {
     //! constructor
     PKDGeometry::PKDGeometry() 
       : Geometry("pkd_geometry")
-    {
-      PING;
-    }
+    {}
 
 
     box3f PKDGeometry::bounds() const
@@ -104,8 +102,6 @@ namespace ospray {
         throw std::runtime_error("failed to find PKDGeometry child node");
       }
       for (const xml::Node &e : pkdNode.child) {
-        // TODO: How are attributes stored again? I forgot, need to fix
-        // the converter and make some examples
         if (e.name == "position") {
           const std::string format = e.getProp("format");
           const size_t offset = std::stoull(e.getProp("ofs"));
@@ -125,7 +121,7 @@ namespace ospray {
         } else if (e.name == "radius") {
           geom->createChild("radius", "float", std::stof(e.content));
         } else if (e.name == "attribute") {
-          std::cout << "Got attribute" << e.getProp("name") << "\n";
+          std::cout << "Got attribute: " << e.getProp("name") << "\n";
           const std::string format = e.getProp("format");
           const size_t offset = std::stoull(e.getProp("ofs"));
           const size_t count = std::stoull(e.getProp("count"));

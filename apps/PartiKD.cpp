@@ -14,6 +14,7 @@
 // limitations under the License.                                           //
 // ======================================================================== //
 
+#include <thread>
 #include "PartiKD.h"
 #include "PKDConfig.h"
 #include "../ospray/MinMaxBVH2.h"
@@ -299,17 +300,11 @@ namespace ospray {
     lBounds.upper[dim] = rBounds.lower[dim] = pos(nodeID,dim);
 
     if ((numLevels - depth) > 20) {
-#if _WIN32
-        std::thread lThread(pkdBuildThread, new PKDBuildJob(this, leftChildOf(nodeID), lBounds, depth + 1));
-        buildRec(rightChildOf(nodeID), rBounds, depth + 1);
-        lThread.join();
-#else
-        pthread_t lThread, rThread;
-        pthread_create(&lThread, NULL, pkdBuildThread, new PKDBuildJob(this, leftChildOf(nodeID), lBounds, depth + 1));
-        buildRec(rightChildOf(nodeID), rBounds, depth + 1);
-        void *ret = NULL;
-        pthread_join(lThread, &ret);
-#endif
+      std::thread lThread([&](){
+        pkdBuildThread(new PKDBuildJob(this,leftChildOf(nodeID),lBounds,depth+1));
+      });
+      buildRec(rightChildOf(nodeID),rBounds,depth+1);
+      lThread.join();
     } else {
         buildRec(leftChildOf(nodeID),lBounds,depth+1);
         buildRec(rightChildOf(nodeID),rBounds,depth+1);
