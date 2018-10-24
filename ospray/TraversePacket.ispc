@@ -67,10 +67,10 @@ inline varying bool PartiKDGeometry_intersectPrim(PartiKDGeometry *uniform self,
   } else /* miss : */
     return false;
 
-    // if (dbg) print("ISEC2\n");
-    // do attribute alpha test, if both attribute and transfer fct are set
-#if !PARTIKD_LIDAR_ENABLED
-  if ((self->attribute != NULL) & (self->transferFunction != NULL)) {
+  // if (dbg) print("ISEC2\n");
+  // do attribute alpha test, if both attribute and transfer fct are set
+#if !PKD_LIDAR_ENABLED
+  if ((self->attribute!=NULL) & (self->transferFunction!=NULL)) {
     // -------------------------------------------------------
     // do attribute test
     uniform float attrib = self->attribute[primID];
@@ -94,12 +94,7 @@ inline varying bool PartiKDGeometry_intersectPrim(PartiKDGeometry *uniform self,
 
   // if (dbg) print("ISEC3\n");
   // found a hit - store it
-#if PRIMID64
-  ray.primID      = primID;
-  ray.primID_hi64 = primID >> 32;
-#else
-  ray.primID         = primID;
-#endif
+  ray.primID = primID;
   ray.geomID = self->geometry.geomID;
   ray.t      = t_in;
   ray.Ng     = ray.t * ray.dir - A;
