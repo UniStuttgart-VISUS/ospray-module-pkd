@@ -149,10 +149,10 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
       if (THIS->colorType != 0) {
           uniform PKDParticle4 *uniform particle_array = (PKDParticle4 *)THIS->particle;
           PKDParticle4 particle_org;
-          uint64 primID64 = (uint32)ray.primID_hi64;
+          /* uint64 primID64 = (uint32)ray.primID_hi64;
           primID64 <<= 32;
-          primID64 += (uint32)ray.primID;
-          foreach_unique(pID in primID64) {
+          primID64 += (uint32)ray.primID; */
+          foreach_unique(pID in ray.primID) {
               uniform PKDParticle4 *uniform ptr = particle_array + pID;
               particle_org = ptr[0];
           }
