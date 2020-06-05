@@ -14,6 +14,10 @@
 ## limitations under the License.                                           ##
 ## ======================================================================== ##
 
+## ======================================================================== ##
+## Modified 2018-2020 VISUS - University Stuttgart                          ##
+## ======================================================================== ##
+
 # mini-scene graph viewer for _geometry_ (intentionally simple)
 OPTION(OSPRAY_MODULE_PKD "Build Particle KD Tree Module." ON)
 OPTION(OSPRAY_MODULE_PKD_BUILDER "Build Particle KD Tree Builder apps." ON)
