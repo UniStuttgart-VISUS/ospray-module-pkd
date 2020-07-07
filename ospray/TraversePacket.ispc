@@ -38,6 +38,31 @@ inline varying bool PartiKDGeometry_intersectPrim(PartiKDGeometry *uniform self,
                                                   uniform primID_t primID,
                                                   varying Ray &ray)
 {
+  const vec3f oc = ray.org - make_vec3f(p.pos[0], p.pos[1], p.pos[2]);
+  const float sqrRad = self->particleRadius*self->particleRadius;
+
+  const float b = dot(-1.0f*oc, ray.dir);
+  const vec3f temp = oc + b*ray.dir;
+  const float delta = sqrRad - dot(temp, temp);
+
+  if (delta < 0.0f) return false;
+
+  const float c = dot(oc, oc) - sqrRad;
+  const float sign = signbits(b) ? 1.0f : -1.0f;
+  const float q = b+sign*sqrt(delta);
+
+  {
+    const float temp = min(c/q,q);
+    if (temp > ray.t0 && temp < ray.t) {
+      ray.primID = primID;
+      ray.geomID = self->geometry.geomID;
+      ray.t      = temp;
+      ray.Ng     = ray.t * ray.dir + oc;
+      return true;
+    }
+  }
+  return false;
+#if 0
   // perform first half of intersection test ....
   const vec3f A = make_vec3f(p.pos[0], p.pos[1], p.pos[2]) - ray.org;
 
@@ -104,6 +129,7 @@ inline varying bool PartiKDGeometry_intersectPrim(PartiKDGeometry *uniform self,
   ray.Ng     = ray.t * ray.dir - A;
   // if (dbg) print("LEAVE ISEC HIT\n");
   return true;
+#endif
 }
 
 struct ThreePhaseStackEntry

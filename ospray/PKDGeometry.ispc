@@ -161,6 +161,8 @@ static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
               particle_org = ptr[0];
           }
           dg.color = decodeColorInt(particle_org.color, THIS->colorType, THIS);
+          //uniform uint8* uniform color = (uniform uint8* uniform)&particle_org.position[3];
+          //dg.color = make_vec4f(color[0], color[1], color[2], color[3]);
           //dg.color = make_vec4f(0.0f, 0.0f, 1.0f, 1.0f);
       } else {
           dg.color = make_vec4f(1.0f, 0.0f, 0.0f, 1.0f);

@@ -169,6 +169,21 @@ inline void getParticle(PartiKDGeometry *uniform self,
     p.pos[2] = pos[2];
   }
 }
+
+inline void getParticle(PartiKDGeometry *uniform self,
+                        varying Particle &p, 
+                        varying primID_t primID)
+{
+  if (self->isVec4) {
+    const varying int64 offset = 4*primID;
+    const uniform float *varying pos = &self->particle[0].position[0];
+    pos += offset;
+    p.dim = ((int *varying)pos)[0] & 3;
+    p.pos[0] = pos[0];
+    p.pos[1] = pos[1];
+    p.pos[2] = pos[2];
+  }
+}
                         
 
 
