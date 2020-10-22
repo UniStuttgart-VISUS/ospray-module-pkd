@@ -38,6 +38,7 @@ inline varying bool PartiKDGeometry_intersectPrim(PartiKDGeometry *uniform self,
                                                   uniform primID_t primID,
                                                   varying Ray &ray)
 {
+  // Ray Tracing Gems Chapter 7
   const vec3f oc = ray.org - make_vec3f(p.pos[0], p.pos[1], p.pos[2]);
   const float sqrRad = self->particleRadius*self->particleRadius;
 
