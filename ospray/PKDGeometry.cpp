@@ -102,7 +102,7 @@ namespace ospray {
     format = particleData->type;
     bool isVec4 = format == OSP_FLOAT4;
     bool isQuantized = format == OSP_ULONG;
-    PRINT(isQuantized);
+    //PRINT(isQuantized);
     //const box3f _centerBounds = getBounds(); //< TODO unnecessary work
 
     box3f centerBounds;
@@ -114,7 +114,7 @@ namespace ospray {
       vec3f const upper(bbox[3], bbox[4], bbox[5]);
       centerBounds = box3f(lower, upper);
     } else {
-      std::cout << "#osp:pkd: Need to re-calculate bounds" << std::endl;
+      //std::cout << "#osp:pkd: Need to re-calculate bounds" << std::endl;
       centerBounds = getBounds();
     }
 
@@ -190,11 +190,11 @@ namespace ospray {
     }
 #endif
 
-    std::cout << "Bounds: " << sphereBounds << "\n";
+    //std::cout << "Bounds: " << sphereBounds << "\n";
 
 
-    std::cout << "#osp:pkd: ColorType: " << colorType << std::endl;
-    std::cout << "#osp:pkd: isVec4: " << isVec4 << std::endl;
+    //std::cout << "#osp:pkd: ColorType: " << colorType << std::endl;
+    //std::cout << "#osp:pkd: isVec4: " << isVec4 << std::endl;
 
     // -------------------------------------------------------
     // actually create the ISPC-side geometry now
