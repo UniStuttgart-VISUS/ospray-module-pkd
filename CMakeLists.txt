@@ -18,62 +18,79 @@
 ## Modified 2018-2020 VISUS - University Stuttgart                          ##
 ## ======================================================================== ##
 
-# mini-scene graph viewer for _geometry_ (intentionally simple)
-OPTION(OSPRAY_MODULE_PKD "Build Particle KD Tree Module." ON)
-OPTION(OSPRAY_MODULE_PKD_BUILDER "Build Particle KD Tree Builder apps." ON)
-OPTION(OSPRAY_MODULE_PKD_SG "Build Particle KD Tree Scenegraph component." ON)
-OPTION(OSPRAY_MODULE_PKD_LIDAR "Build Particle KD Tree Module for LiDAR (requires LAStools)." OFF)
 
-IF (OSPRAY_MODULE_PKD)
-  IF (OSPRAY_MODULE_PKD_LIDAR)
-    SET(PKD_LIDAR_ENABLED 1)
-  ELSE()
-    SET(PKD_LIDAR_ENABLED 0)
-  ENDIF()
-  CONFIGURE_FILE("PKDConfig.h.in" PKDConfig.h)
-  INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
-  INCLUDE_DIRECTORIES_ISPC(${CMAKE_CURRENT_BINARY_DIR})
+cmake_dependent_option(
+  OSPRAY_MODULE_PKD
+  "Build pkd module"
+  OFF
+  OSPRAY_MODULE_CPU
+  OFF
+)
 
-  IF (OSPRAY_MODULE_PKD_SG)
-    set(SG_SRCS "sg/PKD.cpp")
-  ENDIF()
+if (NOT OSPRAY_MODULE_PKD)
+  return()
+endif()
 
-  # ------------------------------------------------------------
-  OSPRAY_CREATE_LIBRARY(ospray_module_pkd
-    ospray/PKDGeometry.cpp
-    ospray/PKDGeometry.ispc
-    ospray/MinMaxBVH2.cpp
-    ospray/MinMaxBVH2.ispc
-    #ospray/AlphaSpheres.cpp
-    #ospray/AlphaSpheres.ispc
-    ospray/TraversePacket.ispc
-    ospray/TraverseSPMD.ispc
+rkcommon_configure_build_type()
 
-    #ospray/render/PKDSplatter.ispc
-    #ospray/render/PKDSplatter.cpp
+add_subdirectory(ospray)
 
-    ${SG_SRCS}
+# # mini-scene graph viewer for _geometry_ (intentionally simple)
+# OPTION(OSPRAY_MODULE_PKD "Build Particle KD Tree Module." ON)
+# OPTION(OSPRAY_MODULE_PKD_BUILDER "Build Particle KD Tree Builder apps." ON)
+# OPTION(OSPRAY_MODULE_PKD_SG "Build Particle KD Tree Scenegraph component." ON)
+# OPTION(OSPRAY_MODULE_PKD_LIDAR "Build Particle KD Tree Module for LiDAR (requires LAStools)." OFF)
 
-  LINK
-    ospray
-    ospray_sg
-    ospray_common
-    ospray_module_ispc
-  )
-  # ------------------------------------------------------------
+# IF (OSPRAY_MODULE_PKD)
+#   IF (OSPRAY_MODULE_PKD_LIDAR)
+#     SET(PKD_LIDAR_ENABLED 1)
+#   ELSE()
+#     SET(PKD_LIDAR_ENABLED 0)
+#   ENDIF()
+#   CONFIGURE_FILE("PKDConfig.h.in" PKDConfig.h)
+#   INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
+#   # INCLUDE_DIRECTORIES_ISPC(${CMAKE_CURRENT_BINARY_DIR})
 
-  # the scene graph plugin
-  #ADD_SUBDIRECTORY(sg)
+#   IF (OSPRAY_MODULE_PKD_SG)
+#     set(SG_SRCS "sg/PKD.cpp")
+#   ENDIF()
 
-  # helper apps (converters, builders,...)
-  IF (OSPRAY_MODULE_PKD_BUILDER)
-    ADD_SUBDIRECTORY(apps)
-  ENDIF()
+#   # ------------------------------------------------------------
+#   OSPRAY_CREATE_LIBRARY(ospray_module_pkd
+#     ospray/PKDGeometry.cpp
+#     ospray/PKDGeometry.ispc
+#     ospray/MinMaxBVH2.cpp
+#     ospray/MinMaxBVH2.ispc
+#     #ospray/AlphaSpheres.cpp
+#     #ospray/AlphaSpheres.ispc
+#     ospray/TraversePacket.ispc
+#     ospray/TraverseSPMD.ispc
 
-#  CONFIGURE_MPI()
-#  ADD_EXECUTABLE(ospDPKDservice
-#    dPKD/service.cpp
-#    )
-#  TARGET_LINK_LIBRARIES(ospDPKDservice ospray_xml${OSPRAY_LIB_SUFFIX})
+#     #ospray/render/PKDSplatter.ispc
+#     #ospray/render/PKDSplatter.cpp
 
-ENDIF()
+#     ${SG_SRCS}
+
+#   LINK
+#     ospray
+#     ospray_sg
+#     ospray_common
+#     ospray_module_ispc
+#   )
+#   # ------------------------------------------------------------
+
+#   # the scene graph plugin
+#   #ADD_SUBDIRECTORY(sg)
+
+#   # helper apps (converters, builders,...)
+#   IF (OSPRAY_MODULE_PKD_BUILDER)
+#     ADD_SUBDIRECTORY(apps)
+#   ENDIF()
+
+# #  CONFIGURE_MPI()
+# #  ADD_EXECUTABLE(ospDPKDservice
+# #    dPKD/service.cpp
+# #    )
+# #  TARGET_LINK_LIBRARIES(ospDPKDservice ospray_xml${OSPRAY_LIB_SUFFIX})
+
+# ENDIF()

@@ -19,210 +19,261 @@
 // ======================================================================== //
 
 #include "PKDGeometry.h"
-#include "PKDConfig.h"
 // ospray
-#include "ospray/common/Model.h"
-#include "ospray/common/OSPCommon.h"
+//#include "ospray/common/Model.h"
+//#include "ospray/common/OSPCommon.h"
 // ispc exports
 #include "PKDGeometry_ispc.h"
-#include "dllexport.h"
+//#include "dllexport.h"
 
 namespace ospray {
+namespace pkd {
 
-  //! Constructor
-  PartiKDGeometry::PartiKDGeometry()
-    : particleRadius(.02f)
-  {
-    ispcEquivalent = ispc::PartiKDGeometry_create(this);
-  }
-
-    vec3f decodeParticle(size_t i) {
-      size_t mask = (1<<20)-1;
-      size_t ix = (i>> 2)&mask;
-      size_t iy = (i>>22)&mask;
-      size_t iz = (i>>42)&mask;
-      return vec3f(ix,iy,iz);
-    }
-
-  
-  vec4f PartiKDGeometry::getParticle(size_t i) const 
-  {
-    switch(format) {
-    case OSP_FLOAT4: return particle4f[i];
-    case OSP_FLOAT3: return vec4f(particle3f[i], 1.0f);
-    case OSP_ULONG: return vec4f(decodeParticle(particle1ul[i]), 1.0f);
-    default: NOTIMPLEMENTED;
-    };
-  }
-
-
-  /*! return bounding box of particle centers */
-  box3f PartiKDGeometry::getBounds() const
-  {
-    box3f b = empty;
-    for (size_t i=0;i<numParticles;i++) {
-      auto pt = getParticle(i);
-      b.extend(vec3f(pt.x, pt.y, pt.z));
-    }
-    return b;
-  }
-
-  uint32 getAttributeBits(float val, float lo, float hi)
-  {
-    if (hi == lo) return 1;
-    int bit = std::min((int)31,int(32*((val-lo)/float(hi-lo))));
-    return 1<<bit;
-  }
-
-  /*! gets called whenever any of this node's dependencies got changed */
-  void PartiKDGeometry::dependencyGotChanged(ManagedObject *object)
-  {
-    ispc::PartiKDGeometry_updateTransferFunction(this->getIE(),transferFunction->getIE());
-  }
-
-
-  /*! \brief integrates this geometry's primitives into the respective
-    model's acceleration structure */
-  void PartiKDGeometry::finalize(Model *model) 
-  {
-    Geometry::finalize(model);
-    // -------------------------------------------------------
-    // parse parameters, using hard assertions (exceptions) for now.
-    //
-    // note:
-    // - "float radius" *MUST* be defined with the object
-    // - "data<vec3f> particles' *MUST* be defined for the object
-    // -------------------------------------------------------
-    particleData = getParamData("position");
-    if (!particleData)
-      throw std::runtime_error("#osp:pkd: no 'position' data found with object");
-
-    particle     = particleData->data;
-    numParticles = particleData->numItems;
-    format = particleData->type;
-    bool isVec4 = format == OSP_FLOAT4;
-    bool isQuantized = format == OSP_ULONG;
-    //PRINT(isQuantized);
-    //const box3f _centerBounds = getBounds(); //< TODO unnecessary work
-
-    box3f centerBounds;
-
-    Ref<Data> bboxData = getParamData("bbox");
-    if (bboxData) {
-      float const* bbox = reinterpret_cast<float const*>(bboxData->data);
-      vec3f const lower(bbox[0], bbox[1], bbox[2]);
-      vec3f const upper(bbox[3], bbox[4], bbox[5]);
-      centerBounds = box3f(lower, upper);
-    } else {
-      //std::cout << "#osp:pkd: Need to re-calculate bounds" << std::endl;
-      centerBounds = getBounds();
-    }
-
-    /*PRINT(_centerBounds);
-    PRINT(centerBounds);*/
-
-    attributeData = getParamData("attribute",NULL);
-    transferFunction = (TransferFunction*)getParamObject("transferFunction",NULL);
-    if (transferFunction) {
-      transferFunction->registerListener(this);
-    } else {
-      postStatusMsg() << "Warning: No transfer function set!";
-    }
-
-    bool useSPMD = getParam1i("useSPMD",0);
-
-    int colorType = getParam1i("colorType", 0);
-
-    particleRadius = getParamf("radius",0.f);
-    if (particleRadius <= 0.f)
-      throw std::runtime_error("#osp:pkd: invalid radius (<= 0.f)");
-    const float expectedRadius
-      = (centerBounds.size().x+centerBounds.size().y+centerBounds.size().z)*powf(numParticles,1.f/3.f);
-    if (particleRadius > 10.f*expectedRadius) {
-      postStatusMsg() << "#osp:pkd: Warning - particle radius is pretty big for given particle configuration !?";
-    }
-    
-    const box3f sphereBounds(centerBounds.lower - vec3f(particleRadius),
-                             centerBounds.upper + vec3f(particleRadius));
-    size_t numInnerNodes = numParticles/2;
-
-
-    // compute attribute mask and attrib lo/hi values
-    float attr_lo = 0.f, attr_hi = 0.f;
-    // TODO will: binBitsArray is leaked on commits
-    uint32 *binBitsArray = NULL;
-    attribute = (float*)(attributeData?attributeData->data:NULL);
-
-    if (numParticles >= (1ULL << 31)) {
-      throw std::runtime_error("PKD Error: Too many particles in this geometry, "
-                               "split this model up into multiple PKD treelets.");
-    }
-
-    // Attribute culling on the lidar type-punned RGB data doesn't make sense, so don't do it
-#if !PKD_LIDAR_ENABLED
-    if (attribute) {
-      postStatusMsg(2) << "#osp:pkd: found attribute, computing range and min/max bit array";
-      attr_lo = attr_hi = attribute[0];
-      for (size_t i=0;i<numParticles;i++) {
-        attr_lo = std::min(attr_lo,attribute[i]);
-        attr_hi = std::max(attr_hi,attribute[i]);
-      }
-
-      binBitsArray = new uint32[numInnerNodes];
-      size_t numBytesRangeTree = numInnerNodes * sizeof(uint32);
-      postStatusMsg(2) << "#osp:pkd: num bytes in range tree " << numBytesRangeTree;
-      for (long long pID=numInnerNodes-1;pID>=0;--pID) {
-        size_t lID = 2*pID+1;
-        size_t rID = lID+1;
-        uint32 lBits = 0, rBits = 0;
-        if (rID < numInnerNodes)
-          rBits = binBitsArray[rID];
-        else if (rID < numParticles)
-          rBits = getAttributeBits(attribute[rID],attr_lo,attr_hi);
-        if (lID < numInnerNodes)
-          lBits = binBitsArray[lID];
-        else if (lID < numParticles)
-          lBits = getAttributeBits(attribute[lID],attr_lo,attr_hi);
-        binBitsArray[pID] = lBits|rBits;
-      }
-      postStatusMsg(2) << "#osp:pkd: found attribute [" << attr_lo << ".."
-        << attr_hi << "], root bits " << (int*)(int64)binBitsArray[0];
-    }
-#endif
-
-    //std::cout << "Bounds: " << sphereBounds << "\n";
-
-
-    //std::cout << "#osp:pkd: ColorType: " << colorType << std::endl;
-    //std::cout << "#osp:pkd: isVec4: " << isVec4 << std::endl;
-
-    // -------------------------------------------------------
-    // actually create the ISPC-side geometry now
-    // -------------------------------------------------------
-    ispc::PartiKDGeometry_set(getIE(),model->getIE(),isQuantized,useSPMD,isVec4,colorType,
-                              transferFunction?transferFunction->getIE():NULL,
-                              particleRadius,
-                              numParticles,
-                              numInnerNodes,
-                              (ispc::PKDParticle*)particle,
-                              attribute,
-                              binBitsArray,
-                              (ispc::box3f&)centerBounds,
-                              (ispc::box3f&)sphereBounds,
-                              attr_lo,
-                              attr_hi);
-
-    if (transferFunction) {
-      ispc::PartiKDGeometry_updateTransferFunction(this->getIE(),
-                                                   transferFunction->getIE());
-    }
-  }    
-
-  OSP_REGISTER_GEOMETRY(PartiKDGeometry,pkd_geometry);
-
-} // ::ospray
-
-extern "C" OSPRAY_DLLEXPORT void ospray_init_module_pkd() 
+//! Constructor
+PKDGeometry::PKDGeometry()
 {
-  std::cout << "#osp:pkd: loading 'pkd' module" << std::endl;
+  getSh()->super.postIntersect = ispc::PKDGeometry_postIntersect_addr();
 }
+
+void PKDGeometry::commit() {
+  global_radius = getParam<float>("global_radius", 0.5f);
+
+  has_global_color = getParam<bool>("has_global_color", true);
+  global_color = getParam<vec4uc>("global_color", vec4uc(255, 0, 0, 255));
+
+  positionData = getParamDataT<vec3f>("position");
+  colorData = getParamDataT<vec4uc>("color");
+
+  num_particles = getParam<unsigned int>("num_particles");
+
+  bounds = getParam<box3f>("bounds");
+
+  createEmbreeUserGeometry((RTCBoundsFunction)&ispc::PKDGeometry_bounds,
+      (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect,
+      (RTCOccludedFunctionN)&ispc::PKDGeometry_occluded);
+  getSh()->position = positionData->data();
+  getSh()->color = colorData->data();
+  getSh()->global_radius = global_radius;
+  getSh()->has_global_color = has_global_color;
+  getSh()->global_color = global_color;
+  getSh()->num_particles = num_particles;
+  getSh()->bounds = bounds;
+  getSh()->super.numPrimitives = numPrimitives();
+  /*getSh()->vertex = *ispc(vertexData);
+  getSh()->radius = *ispc(radiusData);
+  getSh()->texcoord = *ispc(texcoordData);
+  getSh()->global_radius = radius;
+  getSh()->super.numPrimitives = numPrimitives();*/
+
+  postCreationInfo();
+}
+
+// vec3f decodeParticle(size_t i)
+//{
+//   size_t mask = (1 << 20) - 1;
+//   size_t ix = (i >> 2) & mask;
+//   size_t iy = (i >> 22) & mask;
+//   size_t iz = (i >> 42) & mask;
+//   return vec3f(ix, iy, iz);
+// }
+//
+// vec4f PartiKDGeometry::getParticle(size_t i) const
+//{
+//   switch (format) {
+//   case OSP_FLOAT4:
+//     return particle4f[i];
+//   case OSP_FLOAT3:
+//     return vec4f(particle3f[i], 1.0f);
+//   case OSP_ULONG:
+//     return vec4f(decodeParticle(particle1ul[i]), 1.0f);
+//   default:
+//     NOTIMPLEMENTED;
+//   };
+// }
+//
+///*! return bounding box of particle centers */
+// box3f PartiKDGeometry::getBounds() const
+//{
+//   box3f b = empty;
+//   for (size_t i = 0; i < numParticles; i++) {
+//     auto pt = getParticle(i);
+//     b.extend(vec3f(pt.x, pt.y, pt.z));
+//   }
+//   return b;
+// }
+//
+// uint32 getAttributeBits(float val, float lo, float hi)
+//{
+//   if (hi == lo)
+//     return 1;
+//   int bit = std::min((int)31, int(32 * ((val - lo) / float(hi - lo))));
+//   return 1 << bit;
+// }
+//
+///*! gets called whenever any of this node's dependencies got changed */
+// void PartiKDGeometry::dependencyGotChanged(ManagedObject *object)
+//{
+//   ispc::PartiKDGeometry_updateTransferFunction(
+//       this->getIE(), transferFunction->getIE());
+// }
+//
+///*! \brief integrates this geometry's primitives into the respective
+//  model's acceleration structure */
+// void PartiKDGeometry::finalize(Model *model)
+//{
+//  Geometry::finalize(model);
+//  // -------------------------------------------------------
+//  // parse parameters, using hard assertions (exceptions) for now.
+//  //
+//  // note:
+//  // - "float radius" *MUST* be defined with the object
+//  // - "data<vec3f> particles' *MUST* be defined for the object
+//  // -------------------------------------------------------
+//  particleData = getParamData("position");
+//  if (!particleData)
+//    throw std::runtime_error("#osp:pkd: no 'position' data found with
+//    object");
+//
+//  particle = particleData->data;
+//  numParticles = particleData->numItems;
+//  format = particleData->type;
+//  bool isVec4 = format == OSP_FLOAT4;
+//  bool isQuantized = format == OSP_ULONG;
+//  // PRINT(isQuantized);
+//  // const box3f _centerBounds = getBounds(); //< TODO unnecessary work
+//
+//  box3f centerBounds;
+//
+//  Ref<Data> bboxData = getParamData("bbox");
+//  if (bboxData) {
+//    float const *bbox = reinterpret_cast<float const *>(bboxData->data);
+//    vec3f const lower(bbox[0], bbox[1], bbox[2]);
+//    vec3f const upper(bbox[3], bbox[4], bbox[5]);
+//    centerBounds = box3f(lower, upper);
+//  } else {
+//    // std::cout << "#osp:pkd: Need to re-calculate bounds" << std::endl;
+//    centerBounds = getBounds();
+//  }
+//
+//  /*PRINT(_centerBounds);
+//  PRINT(centerBounds);*/
+//
+//  attributeData = getParamData("attribute", NULL);
+//  transferFunction =
+//      (TransferFunction *)getParamObject("transferFunction", NULL);
+//  if (transferFunction) {
+//    transferFunction->registerListener(this);
+//  } else {
+//    postStatusMsg() << "Warning: No transfer function set!";
+//  }
+//
+//  bool useSPMD = getParam1i("useSPMD", 0);
+//
+//  int colorType = getParam1i("colorType", 0);
+//
+//  particleRadius = getParamf("radius", 0.f);
+//  if (particleRadius <= 0.f)
+//    throw std::runtime_error("#osp:pkd: invalid radius (<= 0.f)");
+//  const float expectedRadius =
+//      (centerBounds.size().x + centerBounds.size().y + centerBounds.size().z)
+//      * powf(numParticles, 1.f / 3.f);
+//  if (particleRadius > 10.f * expectedRadius) {
+//    postStatusMsg()
+//        << "#osp:pkd: Warning - particle radius is pretty big for given
+//        particle configuration !?";
+//  }
+//
+//  const box3f sphereBounds(centerBounds.lower - vec3f(particleRadius),
+//      centerBounds.upper + vec3f(particleRadius));
+//  size_t numInnerNodes = numParticles / 2;
+//
+//  // compute attribute mask and attrib lo/hi values
+//  float attr_lo = 0.f, attr_hi = 0.f;
+//  // TODO will: binBitsArray is leaked on commits
+//  uint32 *binBitsArray = NULL;
+//  attribute = (float *)(attributeData ? attributeData->data : NULL);
+//
+//  if (numParticles >= (1ULL << 31)) {
+//    throw std::runtime_error(
+//        "PKD Error: Too many particles in this geometry, "
+//        "split this model up into multiple PKD treelets.");
+//  }
+//
+//  // Attribute culling on the lidar type-punned RGB data doesn't make sense,
+//  so
+//  // don't do it
+// #if !PKD_LIDAR_ENABLED
+//  if (attribute) {
+//    postStatusMsg(2)
+//        << "#osp:pkd: found attribute, computing range and min/max bit array";
+//    attr_lo = attr_hi = attribute[0];
+//    for (size_t i = 0; i < numParticles; i++) {
+//      attr_lo = std::min(attr_lo, attribute[i]);
+//      attr_hi = std::max(attr_hi, attribute[i]);
+//    }
+//
+//    binBitsArray = new uint32[numInnerNodes];
+//    size_t numBytesRangeTree = numInnerNodes * sizeof(uint32);
+//    postStatusMsg(2) << "#osp:pkd: num bytes in range tree "
+//                     << numBytesRangeTree;
+//    for (long long pID = numInnerNodes - 1; pID >= 0; --pID) {
+//      size_t lID = 2 * pID + 1;
+//      size_t rID = lID + 1;
+//      uint32 lBits = 0, rBits = 0;
+//      if (rID < numInnerNodes)
+//        rBits = binBitsArray[rID];
+//      else if (rID < numParticles)
+//        rBits = getAttributeBits(attribute[rID], attr_lo, attr_hi);
+//      if (lID < numInnerNodes)
+//        lBits = binBitsArray[lID];
+//      else if (lID < numParticles)
+//        lBits = getAttributeBits(attribute[lID], attr_lo, attr_hi);
+//      binBitsArray[pID] = lBits | rBits;
+//    }
+//    postStatusMsg(2) << "#osp:pkd: found attribute [" << attr_lo << ".."
+//                     << attr_hi << "], root bits "
+//                     << (int *)(int64)binBitsArray[0];
+//  }
+// #endif
+//
+//  // std::cout << "Bounds: " << sphereBounds << "\n";
+//
+//  // std::cout << "#osp:pkd: ColorType: " << colorType << std::endl;
+//  // std::cout << "#osp:pkd: isVec4: " << isVec4 << std::endl;
+//
+//  // -------------------------------------------------------
+//  // actually create the ISPC-side geometry now
+//  // -------------------------------------------------------
+//  ispc::PartiKDGeometry_set(getIE(),
+//      model->getIE(),
+//      isQuantized,
+//      useSPMD,
+//      isVec4,
+//      colorType,
+//      transferFunction ? transferFunction->getIE() : NULL,
+//      particleRadius,
+//      numParticles,
+//      numInnerNodes,
+//      (ispc::PKDParticle *)particle,
+//      attribute,
+//      binBitsArray,
+//      (ispc::box3f &)centerBounds,
+//      (ispc::box3f &)sphereBounds,
+//      attr_lo,
+//      attr_hi);
+//
+//  if (transferFunction) {
+//    ispc::PartiKDGeometry_updateTransferFunction(
+//        this->getIE(), transferFunction->getIE());
+//  }
+//}
+//
+// OSP_REGISTER_GEOMETRY(PartiKDGeometry, pkd_geometry);
+
+} // namespace pkd
+} // namespace ospray
+
+// extern "C" OSPRAY_DLLEXPORT void ospray_init_module_pkd()
+//{
+//   std::cout << "#osp:pkd: loading 'pkd' module" << std::endl;
+// }

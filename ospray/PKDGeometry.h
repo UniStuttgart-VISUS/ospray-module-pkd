@@ -20,46 +20,55 @@
 
 #pragma once
 
-#include "ospray/geometry/Geometry.h"
-#include "ospray/common/Data.h"
-#include "ospray/transferFunction/TransferFunction.h"
+#include "rkcommon/math/box.h"
+#include "rkcommon/math/vec.h"
+
+#include "geometry/Geometry.h"
+//#include "ospray/common/Data.h"
+//#include "ospray/transferFunction/TransferFunction.h"
+
+#include "PKDGeometryShared.h"
 
 namespace ospray {
+namespace pkd {
 
-  /*! the actual ospray geometry for a PartiKD */
-  struct PartiKDGeometry : public ospray::Geometry {
-    //! Constructor
-    PartiKDGeometry();
+using namespace rkcommon;
 
-    //! \brief common function to help printf-debugging 
-    virtual std::string toString() const { return "ospray::PartiKDGeometry"; }
+/*! the actual ospray geometry for a PartiKD */
+struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
+{
+  //! Constructor
+  PKDGeometry();
+  virtual ~PKDGeometry() = default;
 
-    /*! \brief integrates this geometry's primitives into the respective
-      model's acceleration structure */
-    virtual void finalize(Model *model);
+  std::string toString() const override {
+    return "ospray::pkd::PKDGeometry";
+  }
 
-    /*! return bounding box of particle centers */
-    box3f getBounds() const;
-    vec4f getParticle(size_t i) const;
+  void commit() override;
 
-    /*! gets called whenever any of this node's dependencies got changed */
-    virtual void dependencyGotChanged(ManagedObject *object);
+  size_t numPrimitives() const override
+  {
+    return positionData ? 1 : 0;
+  }
 
-    //! transfer function for color/alpha mapping, may be NULL
-    Ref<TransferFunction> transferFunction;
-    Ref<Data> particleData;
-    Ref<Data> attributeData;
+  /*! return bounding box of particle centers */
+  /*box3f getBounds() const;
+  vec4f getParticle(size_t i) const;*/
 
-    float    *attribute;
-    OSPDataType format; //!< format of the particles: float3, or uint64
-    union {
-      void     *particle;
-      vec4f    *particle4f;
-      vec3f    *particle3f;
-      uint64   *particle1ul;
-    };
-    size_t    numParticles;
-    float     particleRadius;
-  };
-  
+ protected:
+  Ref<DataT<vec3f> const> positionData;
+  Ref<DataT<vec4uc> const> colorData;
+    
+  unsigned int num_particles;
+
+  float global_radius;
+  vec4uc global_color;
+
+  bool has_global_color;
+
+  box3f bounds;
+};
+
+} // namespace pkd
 } // ::ospray

@@ -1,285 +1,366 @@
-// ======================================================================== //
-// Copyright 2009-2014 Intel Corporation                                    //
-//                                                                          //
-// Licensed under the Apache License, Version 2.0 (the "License");          //
-// you may not use this file except in compliance with the License.         //
-// You may obtain a copy of the License at                                  //
-//                                                                          //
-//     http://www.apache.org/licenses/LICENSE-2.0                           //
-//                                                                          //
-// Unless required by applicable law or agreed to in writing, software      //
-// distributed under the License is distributed on an "AS IS" BASIS,        //
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. //
-// See the License for the specific language governing permissions and      //
-// limitations under the License.                                           //
-// ======================================================================== //
-
-// ======================================================================== //
-// Modified 2018-2020 VISUS - University Stuttgart                          //
-// ======================================================================== //
-
 // ospray
-#include "common/Model.ih"
+#include "common/Data.ih"
+#include "common/DifferentialGeometry.ih"
 #include "common/Ray.ih"
 #include "geometry/Geometry.ih"
-#include "math/box.ih"
-#include "math/vec.ih"
-#include "transferFunction/LinearTransferFunction.ih"
-// this module
-#include "PKDConfig.h"
-#include "PKDGeometry.ih"
-// embree
-#include "geometry/Geometry.ih"
-#if PKD_LIDAR_ENABLED
-#include "ColorMask.h"
-#endif
+#include "rkcommon/math/box.ih"
+#include "rkcommon/math/vec.ih"
+// c++ chared
+#include "PKDGeometryShared.h"
 
-vec4f decodeColor(float colorCode, uniform int colorType, uniform PartiKDGeometry *uniform THIS) {
-  unsigned int *color_code = (unsigned int *)(&colorCode);
-  if (colorType == 1 || colorType == 3) {
-    float r = (color_code[0] & 0xff) / 255.0f;
-    float g = ((color_code[0] >> 8) & 0xff) / 255.0f;
-    float b = ((color_code[0] >> 16) & 0xff) / 255.0f;
-    return make_vec4f(r, g, b, 1.0f);
-  } else if (colorType == 2 || colorType == 4) {
-    float r = (color_code[0] >> 24) / 255.0f;
-    float g = ((color_code[0] >> 16) & 0xff) / 255.0f;
-    float b = ((color_code[0] >> 8) & 0xff) / 255.0f;
-    float a = (color_code[0] & 0xff) / 255.0f;
-    return make_vec4f(r, g, b, a);
-  } else if (colorType == 5) {
-    return make_vec4f(THIS->transferFunction->getColorForValue(THIS->transferFunction, colorCode), 1.0f);
-  }
-  return make_vec4f(0.0f, 0.0f, 0.0f, 0.0f);
+inline float safe_rcp(float f) 
+{ return (abs(f) < 1e-20f)?1e20f:rcp(f); }
+
+inline void intersectBox(varying const Ray& ray, uniform const box3f& bounds, varying float& t0, varying float& t1) {
+    vec3f t_lower = (bounds.lower - ray.org) / ray.dir;
+    vec3f t_upper = (bounds.upper - ray.org) / ray.dir;
+
+    vec3f t_min3 = min(t_lower, t_upper);
+    vec3f t_max3 = max(t_lower, t_upper);
+
+    t0 = max(t0, max(t_min3.x, max(t_min3.y, t_min3.z)));
+    t1 = min(t1, min(t_max3.x, min(t_max3.y, t_max3.z)));
 }
 
-vec4f decodeColorInt(unsigned int colorCode, uniform int colorType, uniform PartiKDGeometry *uniform THIS) {
-  if (colorType == 1 || colorType == 3) {
-    float r = ((float)(colorCode >> 24)) / 255.0f;
-    float g = ((float)((colorCode >> 16) & 0xff)) / 255.0f;
-    float b = ((float)((colorCode >> 8) & 0xff)) / 255.0f;
-    return make_vec4f(r, g, b, 1.0f);
-  } else if (colorType == 2 || colorType == 4) {
-    float r = ((float)(colorCode >> 24)) / 255.0f;
-    float g = ((float)((colorCode >> 16) & 0xff)) / 255.0f;
-    float b = ((float)((colorCode >> 8) & 0xff)) / 255.0f;
-    float a = ((float)(colorCode & 0xff)) / 255.0f;
-    return make_vec4f(r, g, b, a);
-  } else if (colorType == 5) {
-    float color = ((float)colorCode) / 255.0f;
-    return make_vec4f(THIS->transferFunction->getColorForValue(THIS->transferFunction, colorCode), 1.0f);
-  }
-  return make_vec4f(0.0f, 0.0f, 0.0f, 0.0f);
-}
-
-static void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
-                                          uniform Model *uniform model,
-                                          varying DifferentialGeometry &dg,
-                                          const varying Ray &ray,
-                                          uniform int64 flags)
+inline varying bool PKDGeometry_intersectPrim(
+                                                  uniform vec3f const& p,
+                                                  uniform unsigned int const primID,
+                                                  uniform float const sqrRad,
+                                                  varying Ray &ray)
 {
-  uniform PartiKDGeometry *uniform THIS =
-      (uniform PartiKDGeometry * uniform) geometry;
+  // Ray Tracing Gems Chapter 7
+  const vec3f oc = ray.org - p;
 
-  dg.Ng = dg.Ns = ray.Ng;
+  const float b = dot(-1.0f*oc, ray.dir);
+  const vec3f temp = oc + b*ray.dir;
+  const float delta = sqrRad - dot(temp, temp);
 
-#if PKD_LIDAR_ENABLED
-  if ((flags & DG_COLOR) && (THIS->attribute != NULL)){
-    uniform int *uniform attribArray = (uniform int *uniform)THIS->attribute;
-    const int attrib = attribArray[ray.primID];
-    dg.color = make_vec4f(GET_RED(attrib) / 255.0, GET_GREEN(attrib) / 255.0,
-        GET_BLUE(attrib) / 255.0, 1.0);
-  }
-#else
-  if ((flags & DG_COLOR) && THIS->attribute != NULL &&
-      THIS->transferFunction != NULL && !THIS->isVec4) {
-#if 1
-    uniform float *uniform attribArray = THIS->attribute;
-    const uniform float attrib_lo      = THIS->attr_lo;
-    const uniform float attrib_hi      = THIS->attr_hi;
+  if (delta < 0.0f) return false;
 
-    float attrib_org = attribArray[ray.primID];
-      
-    const float attrib
-      = (attrib_org - attrib_lo)
-      * rcp(attrib_hi - attrib_lo + 1e-10f);
-    // if (attrib >= 1.f || attrib <= 0.f) 
-    //   print("ATTRIB OUT OF RANGE:\n org %\n remapped %\n ID %:%\n range % %\n",
-    //         attrib_org,attrib,primID64,ray.primID,attrib_lo,attrib_hi);
-    // compute alpha value from attribute value
-    const float alpha = THIS->transferFunction->getOpacityForValue(THIS->transferFunction,
-                                                                   attrib);
-    const vec3f color = THIS->transferFunction->getColorForValue(THIS->transferFunction,
-                                                                 attrib);
-    dg.color = make_vec4f(color.x,color.y,color.z,1.0);
-#else
-    foreach_unique(upper64 in ray.primID_hi64)
-    {
-      if (upper64)
-        print("UPPER: %\n", upper64);
-      uniform uint64 offs = upper64;
-      offs                = offs << 32;
-      uniform float *uniform attribArray =
-          THIS->attribute + offs;  //; // + (((unsigned int64)upper64)<<32);
-      // normalize attribute to the [0,1] range (by normalizing relative
-      // to the attribute range stored in the min max BVH's root node
-      const uniform float attrib_lo = THIS->attr_lo;
-      const uniform float attrib_hi = THIS->attr_hi;
-      attrib_array += (unsigned int32)ray.primID;
-      const float attrib_org = attribArray[0];  //(unsigned int32)ray.primID];
-      const float attrib =
-          (attrib_org - attrib_lo) * rcp(attrib_hi - attrib_lo + 1e-10f);
-      if (attrib >= 1.f || attrib <= 0.f)
-        print(
-            "ATTRIB OUT OF RANGE:\n org %\n remapped %\n ID %:%\n range % %\n",
-            attrib_org,
-            attrib,
-            offs,
-            ray.primID,
-            attrib_lo,
-            attrib_hi);
-      // compute alpha value from attribute value
-      const float alpha = THIS->transferFunction->getOpacityForValue(
-          THIS->transferFunction, attrib);
-      const vec3f color = THIS->transferFunction->getColorForValue(
-          THIS->transferFunction, attrib);
-      dg.color = make_vec4f(color.x, color.y, color.z, alpha);
+  const float c = dot(oc, oc) - sqrRad;
+  const float sign = signbits(b) ? 1.0f : -1.0f;
+  const float q = b+sign*sqrt(delta);
+
+  {
+    const float temp = min(c/q,q);
+    if (temp > ray.t0 && temp < ray.t) {
+      ray.primID = primID;
+      // ray.geomID = self->super.geomID;
+      ray.t      = temp;
+      ray.Ng     = ray.t * ray.dir + oc;
+      return true;
     }
-#endif
   }
-  
-#endif
-  if ((flags & DG_COLOR) && THIS->isVec4) {
-      if (THIS->colorType != 0) {
-          uniform PKDParticle4 *uniform particle_array = (PKDParticle4 *)THIS->particle;
-          PKDParticle4 particle_org;
-          /* uint64 primID64 = (uint32)ray.primID_hi64;
-          primID64 <<= 32;
-          primID64 += (uint32)ray.primID; */
-          foreach_unique(pID in ray.primID) {
-              uniform PKDParticle4 *uniform ptr = particle_array + pID;
-              particle_org = ptr[0];
-          }
-          dg.color = decodeColorInt(particle_org.color, THIS->colorType, THIS);
-          //uniform uint8* uniform color = (uniform uint8* uniform)&particle_org.position[3];
-          //dg.color = make_vec4f(color[0], color[1], color[2], color[3]);
-          //dg.color = make_vec4f(0.0f, 0.0f, 1.0f, 1.0f);
-      } else {
-          dg.color = make_vec4f(1.0f, 0.0f, 0.0f, 1.0f);
+  return false;
+}
+
+struct ThreePhaseStackEntry
+{
+  varying float t_in, t_out, t_sphere_out;
+  uniform unsigned int sphereID;
+  uniform unsigned int farChildID;
+};
+
+inline float get_coord(uniform vec3f const& p, uniform unsigned int const dim) {
+if (dim == 0) {
+return p.x;
+}
+if (dim == 1) {
+return p.y;
+}
+if (dim == 2) {
+return p.z;
+}
+}
+
+inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
+                                varying Ray &ray,
+                                const varying float rdir[3],
+                                const varying float org[3],
+                                const varying float t_in_0,
+                                const varying float t_out_0,
+                                const uniform size_t dir_sign[3],
+                                const uniform bool isShadowRay)
+{
+  // ++rayID;
+  // print("Ray %\n",rayID);
+  // uniform bool dbg = false; //(rayID == 338);
+
+  varying ThreePhaseStackEntry stack[64];
+  varying ThreePhaseStackEntry *uniform stackPtr = stack;
+
+  uniform unsigned int nodeID = 0;
+  uniform unsigned int dim    = 0;
+
+  float t_in                                  = t_in_0;
+  float t_out                                 = t_out_0;
+  const uniform float radius                  = self->global_radius;
+  const uniform float sqr_radius              = radius*radius;
+  const uniform unsigned int numParticles     = self->num_particles;
+  const uniform vec3f *uniform const position = self->position;
+  // if (dbg) print("ENTER TRAVERSAL\n");
+  uniform vec3f p;
+  while (1) {
+    // ------------------------------------------------------------------
+    // do traversal step(s) as long as possible
+    // ------------------------------------------------------------------
+    // if (dbg) print("TRAV %\n",nodeID);
+    while (1) {
+      // if (dbg) print("DOWN %\n",nodeID);
+
+      if (t_in > t_out)
+        break;
+
+      p = position[nodeID];
+
+      {
+        // this is a leaf node - can't to to a leaf, anyway. Intersect
+        // the prim, and be done with it.
+        // if (dbg) print("LEAFISEC0\n");
+        PKDGeometry_intersectPrim(p, nodeID, sqr_radius, ray);
+        // if (dbg) print("LEAFISEC1\n");
+        if (isShadowRay && ray.primID >= 0)
+          return;
+        break;
       }
+
+      // #if !DIM_FROM_DEPTH
+      // INT3 *uniform intPtr = (INT3 *uniform)self->particle;
+      // dim = intPtr[nodeID].x & 3;
+      //dim = p.dim;
+      dim = (*((unsigned int *uniform)&p.x)) & 3;
+      // #endif
+
+      const uniform size_t sign = dir_sign[dim];
+
+      // ------------------------------------------------------------------
+      // traversal step: compute distance, then compute intervals for front and
+      // back side
+      // ------------------------------------------------------------------
+      const float org_to_node_dim = get_coord(p, dim) - org[dim];
+
+      const float t_plane_0 = (org_to_node_dim - radius) * rdir[dim];
+      const float t_plane_1 = (org_to_node_dim + radius) * rdir[dim];
+
+      const float t_plane_nr = min(t_plane_0, t_plane_1);
+      const float t_plane_fr = max(t_plane_0, t_plane_1);
+
+      const float t_farChild_in   = max(t_in, t_plane_nr);
+      const float t_farChild_out  = t_out;
+      const float t_nearChild_out = min(t_out, t_plane_fr);
+
+      // catch the case where all ray segments are on far side
+      if (none(t_in < t_nearChild_out)) {
+        if (none(t_farChild_in < t_farChild_out)) {
+          break;
+        } else {
+          t_in   = t_farChild_in;
+          t_out  = t_farChild_out;
+          nodeID = 2 * nodeID + 2 - sign;
+          continue;
+        }
+      }
+
+      unmasked
+      {
+        stackPtr->t_in         = 1e20f;
+        stackPtr->t_out        = -1e20f;
+        stackPtr->t_sphere_out = -1e20f;
+      }
+      stackPtr->farChildID = 2 * nodeID + 2 - sign;
+
+      stackPtr->t_in         = t_farChild_in;
+      stackPtr->t_out        = t_farChild_out;
+      stackPtr->t_sphere_out = t_nearChild_out;
+
+      t_out = t_nearChild_out;
+
+      stackPtr->sphereID = nodeID;
+
+      if (any(t_farChild_in < t_farChild_out))
+        ++stackPtr;
+
+      if (none(t_in < t_out))
+        break;
+
+      // if (dbg) print("nodeID a0 %\n",nodeID);
+      nodeID = min(2 * nodeID + 1 + sign, numParticles - 1);
+      // if (dbg) print("nodeID a1 %\n",nodeID);
+      continue;
+    }
+    // ------------------------------------------------------------------
+    // couldn't go down any further; pop a node from stack
+    // ------------------------------------------------------------------
+    while (1) {
+      // if (dbg) print("POP\n");
+      // pop as long as we have to ... or until nothing is left to pop.
+      if (stackPtr == stack) {
+        return;
+      }
+      unmasked
+      {
+        t_in  = stackPtr[-1].t_in;
+        t_out = min(stackPtr[-1].t_out, ray.t);
+      }
+      --stackPtr;
+
+      // check if the node is still active (all the traversal since it
+      // originally got pushed may have shortened the ray)
+      if (none(t_in < t_out))
+        continue;
+
+      // intersect the actual node...
+      if (t_in < min(stackPtr->t_sphere_out, ray.t)) {
+        uniform vec3f p;
+        p = position[stackPtr->sphereID];
+        PKDGeometry_intersectPrim(p, stackPtr->sphereID, sqr_radius, ray);
+        if (isShadowRay && ray.primID >= 0)
+          return;
+      }
+
+      // do the distance test again, we might just have shortened the ray...
+      unmasked
+      {
+        t_out = min(t_out, ray.t);
+      }
+      // if (dbg) print("nodeID b0 %\n",nodeID);
+      nodeID = min(stackPtr->farChildID, numParticles - 1);
+      // if (dbg) print("nodeID b1 %\n",nodeID);
+
+      break;
+    }
   }
-
-  //dg.color = make_vec4f(1.0f, 1.0f, 0.0f, 1.0f);
+  // if (dbg) print("DONE TRAVERSAL\n");
 }
 
-unmasked void PartiKDGeometry_bounds(const RTCBoundsFunctionArguments *uniform args)
+inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
+                                varying Ray &ray,
+                                uniform bool isShadowRay)
 {
-  uniform PartiKDGeometry *uniform geom = (uniform PartiKDGeometry *uniform)args->geometryUserPtr;
-  box3fa *uniform out = (box3fa *uniform)args->bounds_o;
-  *out = make_box3fa(geom->sphereBounds.lower, geom->sphereBounds.upper);
-}
+  float t_in = ray.t0, t_out = ray.t;
+  intersectBox(ray, self->bounds, t_in, t_out);
 
-/*! creates a new pkd geometry */
-export void *uniform PartiKDGeometry_create(void *uniform cppEquivalent)
-{
-  uniform PartiKDGeometry *uniform geom = uniform new uniform PartiKDGeometry;
-  Geometry_Constructor(&geom->geometry,
-                       cppEquivalent,
-                       PartiKDGeometry_postIntersect,
-                       NULL,
-                       0,
-                       NULL);
-  return geom;
-}
+  if (t_out < t_in)
+    return;
 
-/*! helper function that recomputes the bin-bits from the transfer
-    function for parameter range culling. note this function does
-    _NOT_ change anything in the tree itself, it only re-bins the
-    transfer function*/
-export void PartiKDGeometry_updateTransferFunction(
-    void *uniform _THIS, void *uniform _transferFunction)
-{
-  PartiKDGeometry *uniform THIS = (PartiKDGeometry * uniform) _THIS;
-  TransferFunction *uniform transferFunction =
-      (TransferFunction * uniform) _transferFunction;
-  THIS->transferFunction_activeBinBits = 0;
-  for (uniform int i = 0; i < 32; i++) {
-    uniform float a0         = i / 32.f;
-    uniform float a1         = (i + 1) / 32.f - 1e-5f;
-    vec2f range              = make_vec2f(a0, a1);
-    uniform float alphaRange = extract(
-        transferFunction->getMaxOpacityInRange(transferFunction, range), 0);
-    if (alphaRange >= .5f)
-      THIS->transferFunction_activeBinBits |= (1UL << i);
-  }
-}
+  const varying float rdir[3] = {
+      safe_rcp(ray.dir.x), safe_rcp(ray.dir.y), safe_rcp(ray.dir.z)};
+  const varying float org[3] = {ray.org.x, ray.org.y, ray.org.z};
 
-/*! 'constructor' for a newly created pkd geometry */
-export void PartiKDGeometry_set(void *uniform _geom,
-                                void *uniform _model,
-                                uniform bool isQuantized,
-                                uniform bool useSPMD,
-                                uniform bool isVec4,
-                                uniform int colorType,
-                                void *uniform transferFunction,
-                                float uniform particleRadius,
-                                uniform uint64 numParticles,
-                                uniform uint64 numInnerNodes,
-                                PKDParticle *uniform particle,
-                                float *uniform attribute,
-                                uint32 *uniform innerNode_attributeMask,
-                                uniform box3f &centerBounds,
-                                uniform box3f &sphereBounds,
-                                uniform float attr_lo,
-                                uniform float attr_hi)
-{
-  uniform PartiKDGeometry *uniform geom =
-      (uniform PartiKDGeometry * uniform) _geom;
-  uniform Model *uniform model = (uniform Model * uniform) _model;
-
-  RTCGeometry embreeGeom = rtcNewGeometry(ispc_embreeDevice(), RTC_GEOMETRY_TYPE_USER);
-  uniform uint32 geomID = rtcAttachGeometry(model->embreeSceneHandle, embreeGeom);
-  
-  geom->geometry.model  = model;
-  geom->isQuantized     = isQuantized;
-  geom->isVec4          = isVec4;
-  geom->colorType       = colorType;
-  geom->geometry.geomID = geomID;
-  geom->particleRadius  = particleRadius;
-  geom->particle        = particle;
-  geom->numParticles    = numParticles;
-  geom->numInnerNodes   = numInnerNodes;
-  geom->centerBounds    = centerBounds;
-  geom->sphereBounds    = sphereBounds;
-  geom->attribute       = attribute;
-  geom->attr_lo         = attr_lo;
-  geom->attr_hi         = attr_hi;
-  geom->innerNode_attributeMask = innerNode_attributeMask;
-  geom->epsilon = geom->particleRadius / 100.0;
-
-  geom->transferFunction = (TransferFunction *uniform)transferFunction;
-  if (transferFunction)  {
-    PartiKDGeometry_updateTransferFunction(geom, transferFunction);
-  }
-
-  rtcSetGeometryUserData(embreeGeom, geom);
-  rtcSetGeometryUserPrimitiveCount(embreeGeom, 1);
-  rtcSetGeometryBoundsFunction(embreeGeom,
-      (uniform RTCBoundsFunction)&PartiKDGeometry_bounds, geom);
-
-  if (useSPMD) {
-    print("creating PKD with ***SPMD*** traversal\n");
-    rtcSetGeometryIntersectFunction(embreeGeom,
-        (uniform RTCIntersectFunctionN)&PartiKDGeometry_intersect_spmd);
-    rtcSetGeometryOccludedFunction(embreeGeom,
-        (uniform RTCOccludedFunctionN)&PartiKDGeometry_occluded_spmd);
+  uniform size_t dir_sign[3];
+  if (ray.dir.z > 0.f) {
+    dir_sign[2] = 0;
+    if (ray.dir.y > 0.f) {
+      dir_sign[1] = 0;
+      if (ray.dir.x > 0.f) {
+        dir_sign[0] = 0;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      } else {
+        dir_sign[0] = 1;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      }
+    } else {
+      dir_sign[1] = 1;
+      if (ray.dir.x > 0.f) {
+        dir_sign[0] = 0;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      } else {
+        dir_sign[0] = 1;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      }
+    }
   } else {
-    rtcSetGeometryIntersectFunction(embreeGeom,
-        (uniform RTCIntersectFunctionN)&PartiKDGeometry_intersect_packet);
-    rtcSetGeometryOccludedFunction(embreeGeom,
-        (uniform RTCOccludedFunctionN)&PartiKDGeometry_occluded_packet);
+    dir_sign[2] = 1;
+    if (ray.dir.y > 0.f) {
+      dir_sign[1] = 0;
+      if (ray.dir.x > 0.f) {
+        dir_sign[0] = 0;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      } else {
+        dir_sign[0] = 1;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      }
+    } else {
+      dir_sign[1] = 1;
+      if (ray.dir.x > 0.f) {
+        dir_sign[0] = 0;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      } else {
+        dir_sign[0] = 1;
+        pkd_traverse_packet(
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+      }
+    }
   }
-  rtcCommitGeometry(embreeGeom);
-  rtcReleaseGeometry(embreeGeom);
 }
 
+
+
+void PKDGeometry_postIntersect(const Geometry *uniform geometry,
+    varying DifferentialGeometry &dg,
+    const varying Ray &ray,
+    uniform int64 flags)
+{
+    const PKDGeometry *uniform self =
+        (const PKDGeometry *uniform)geometry;
+    dg.Ng = dg.Ns = normalize(ray.Ng);
+
+    float radius = self->global_radius;
+
+    dg.epsilon = radius * ulpEpsilon;
+
+    if (flags & DG_COLOR) {
+        vec4f color = make_vec4f(self->global_color.x/255.f, self->global_color.y/255.f, self->global_color.z/255.f, self->global_color.w/255.f);
+        if (and(self->color != 0, !self->has_global_color)) {
+            vec4uc tmp_color = self->color[ray.primID];
+            color = make_vec4f(tmp_color.x/255.f, tmp_color.y/255.f, tmp_color.z/255.f, tmp_color.w/255.f);
+        }
+    }
+}
+
+void PKDGeometry_intersect_kernel(
+    const RTCIntersectFunctionNArguments *uniform args,
+    const uniform bool isOcclusionTest)
+{
+if (!args->valid[programIndex])
+    return;
+
+    PKDGeometry *uniform self = (PKDGeometry * uniform) args->geometryUserPtr;
+
+  // this assumes that the args->rayhit is actually a pointer to a varying ray!
+  varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
+
+  pkd_traverse_packet(self, *ray, isOcclusionTest);
+}
+
+export void PKDGeometry_bounds(
+    const RTCBoundsFunctionArguments *uniform args)
+{
+    uniform PKDGeometry *uniform geom = (uniform PKDGeometry *uniform)args->geometryUserPtr;
+    box3fa *uniform out = (box3fa *uniform)args->bounds_o;
+    *out = make_box3fa(geom->bounds.lower, geom->bounds.upper);
+}
+
+export void PKDGeometry_intersect(
+    const struct RTCIntersectFunctionNArguments *uniform args)
+{
+    PKDGeometry_intersect_kernel(args, false);
+}
+
+export void PKDGeometry_occluded(
+    const struct RTCIntersectFunctionNArguments *uniform args)
+{
+    PKDGeometry_intersect_kernel(args, true);
+}
+
+export void *uniform PKDGeometry_postIntersect_addr()
+{
+    return PKDGeometry_postIntersect;
+}
