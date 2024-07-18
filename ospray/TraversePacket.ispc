@@ -153,7 +153,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // #if !DIM_FROM_DEPTH
       // INT3 *uniform intPtr = (INT3 *uniform)self->particle;
       // dim = intPtr[nodeID].x & 3;
-      dim = get_dim(p.position[0]);
+      //dim = get_dim(p.position[0]);
+      dim = ((unsigned int)p.position[0]) & 3;
       // #endif
       print("DIM %\n", dim);
 
