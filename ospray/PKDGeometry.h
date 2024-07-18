@@ -63,6 +63,7 @@ struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
   unsigned int num_particles;
 
   float global_radius;
+  Ref<DataT<unsigned char> const> globalColorData;
   vec4uc global_color;
 
   bool has_global_color;

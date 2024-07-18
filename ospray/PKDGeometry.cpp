@@ -39,7 +39,14 @@ void PKDGeometry::commit() {
   global_radius = getParam<float>("global_radius", 0.5f);
 
   has_global_color = getParam<bool>("has_global_color", true);
-  global_color = getParam<vec4uc>("global_color", vec4uc(255, 0, 0, 255));
+  globalColorData = getParamDataT<unsigned char>("global_color");
+  global_color = vec4uc(255, 0, 0, 255);
+  if (globalColorData) {
+    global_color.x = globalColorData->as<unsigned char>()[0];
+    global_color.y = globalColorData->as<unsigned char>()[1];
+    global_color.z = globalColorData->as<unsigned char>()[2];
+    global_color.w = globalColorData->as<unsigned char>()[3];
+  }
 
   positionData = getParamDataT<vec3f>("position");
   colorData = getParamDataT<vec4uc>("color");
