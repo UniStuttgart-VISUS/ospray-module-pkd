@@ -82,7 +82,7 @@ uniform float get_coord(uniform vec3f const& p, int dim) {
     return p.z;
 }
 
-uniform unsigned int get_dim(uniform float const& x) {
+uniform unsigned int get_dim(uniform float const x) {
   return (uniform unsigned int)x & 3;
 }
 
