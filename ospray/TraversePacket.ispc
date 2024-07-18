@@ -97,7 +97,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
 {
   // ++rayID;
   // print("Ray %\n",rayID);
-  // uniform bool dbg = false; //(rayID == 338);
+  uniform bool dbg = false; //(rayID == 338);
 
   varying ThreePhaseStackEntry stack[64];
   varying ThreePhaseStackEntry *uniform stackPtr = stack;
@@ -112,8 +112,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   const uniform primID_t numParticles = self->num_particles;
   const uniform PKDParticle *uniform const particle =
       (PKDParticle * uniform const) self->position;
-  // if (dbg) print("ENTER TRAVERSAL\n");
-  print("ENTER TRAVERSAL\n");
+  if (dbg) print("ENTER TRAVERSAL\n");
   uniform PKDParticle p;
   while (1) {
     // ------------------------------------------------------------------
@@ -135,8 +134,9 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         // if (dbg) print("LEAFISEC0\n");
         PKDGeometry_intersectPrim(self, p, nodeID, ray);
         // if (dbg) print("LEAFISEC1\n");
-        print("LEAFISEC1 % %\n", nodeID, numInnerNodes);
-        print("POS % % %\n", p.position[0], p.position[1], p.position[2]);
+        if (dbg) print("LEAFISEC1 % %\n", nodeID, numInnerNodes);
+        if (dbg)
+          print("POS % % %\n", p.position[0], p.position[1], p.position[2]);
         if (isShadowRay && ray.primID >= 0)
           return;
         break;
@@ -160,7 +160,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         dim = ((int *uniform)pos)[0] & 3;
       }
       // #endif
-      print("DIM %\n", dim);
+      if (dbg)
+        print("DIM %\n", dim);
 
       const uniform size_t sign = dir_sign[dim];
 
@@ -226,9 +227,11 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     while (1) {
       // if (dbg) print("POP\n");
       // pop as long as we have to ... or until nothing is left to pop.
-      print("POP\n");
+      if (dbg)
+        print("POP\n");
       if (stackPtr == stack) {
-        print("LEAVE TRAVERSAL\n");
+        if (dbg)
+          print("LEAVE TRAVERSAL\n");
         return;
       }
       unmasked
@@ -268,7 +271,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     }
   }
   // if (dbg) print("DONE TRAVERSAL\n");
-  print("DONE TRAVERSAL\n");
+  if (dbg)
+    print("DONE TRAVERSAL\n");
 }
 
 /*! generic traverse/occluded function that splits the packet into
