@@ -311,6 +311,7 @@ void PKDGeometry_postIntersect(const Geometry *uniform geometry,
     const varying Ray &ray,
     uniform int64 flags)
 {
+    print("POSTINTERSECT\n");
     const PKDGeometry *uniform self =
         (const PKDGeometry *uniform)geometry;
     dg.Ng = dg.Ns = normalize(ray.Ng);
@@ -325,6 +326,7 @@ void PKDGeometry_postIntersect(const Geometry *uniform geometry,
             vec4uc tmp_color = get_vec4uc(self->color, ray.primID);
             color = make_vec4f(tmp_color.x/255.f, tmp_color.y/255.f, tmp_color.z/255.f, tmp_color.w/255.f);
         }*/
+        dg.color = color;
     }
 }
 
