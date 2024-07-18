@@ -67,6 +67,7 @@ struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
 
   bool has_global_color;
 
+  Ref<DataT<float> const> boundsData;
   box3f bounds;
 };
 

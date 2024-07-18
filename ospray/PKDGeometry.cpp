@@ -46,7 +46,13 @@ void PKDGeometry::commit() {
 
   num_particles = getParam<unsigned int>("num_particles");
 
-  bounds = getParam<box3f>("bounds");
+  boundsData = getParamDataT<float>("bounds");
+  bounds.lower.x = boundsData->as<float>()[0];
+  bounds.lower.y = boundsData->as<float>()[1];
+  bounds.lower.z = boundsData->as<float>()[2];
+  bounds.upper.x = boundsData->as<float>()[3];
+  bounds.upper.y = boundsData->as<float>()[4];
+  bounds.upper.z = boundsData->as<float>()[5];
 
   createEmbreeUserGeometry((RTCBoundsFunction)&ispc::PKDGeometry_bounds,
       (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect,
