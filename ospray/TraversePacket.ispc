@@ -134,7 +134,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         // if (dbg) print("LEAFISEC0\n");
         PKDGeometry_intersectPrim(self, p, nodeID, ray);
         // if (dbg) print("LEAFISEC1\n");
-        print("LEAFISEC1\n");
+        print("LEAFISEC1 % %\n", nodeID, numInnerNodes);
         if (isShadowRay && ray.primID >= 0)
           return;
         break;
