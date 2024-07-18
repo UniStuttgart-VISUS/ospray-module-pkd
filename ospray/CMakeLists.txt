@@ -19,6 +19,7 @@ ispc_target_add_sources(ospray_module_pkd
   # for ray-primitive intersection and 'postIntersect' (reporting info
   # on a previously computed ray-prim intersection)
   PKDGeometry.ispc
+  TraversePacket.ispc
 
   # and finally, the module init code (not doing much, but must be there)
   moduleInit.cpp

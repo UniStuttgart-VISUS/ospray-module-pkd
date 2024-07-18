@@ -70,6 +70,7 @@ void PKDGeometry::commit() {
   getSh()->has_global_color = has_global_color;
   getSh()->global_color = global_color;
   getSh()->num_particles = num_particles;
+  getSh()->num_innerNodes = num_particles / 2;
   getSh()->bounds = bounds;
   getSh()->super.numPrimitives = numPrimitives();
   /*getSh()->vertex = *ispc(vertexData);

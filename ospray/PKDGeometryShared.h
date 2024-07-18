@@ -38,6 +38,7 @@ struct PKDGeometry
   bool has_global_color;
 
   unsigned int num_particles;
+  unsigned int num_innerNodes;
 
   box3f bounds;
 

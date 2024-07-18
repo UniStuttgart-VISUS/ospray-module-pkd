@@ -19,118 +19,51 @@
 // ======================================================================== //
 
 // ospray
-#include "common/Model.ih"
+#include "common/Data.ih"
 #include "common/Ray.ih"
+#include "common/Intersect.ih"
 #include "geometry/Geometry.ih"
-#include "math/box.ih"
-#include "math/vec.ih"
-#include "transferFunction/LinearTransferFunction.ih"
+#include "rkcommon/math/box.ih"
+#include "rkcommon/math/vec.ih"
 // this module
-#include "PKDConfig.h"
+#include "PKDGeometryShared.h"
 #include "PKDGeometry.ih"
 
 // uniform int rayID = 0;
 
 #define LOD 0
 
-inline varying bool PartiKDGeometry_intersectPrim(PartiKDGeometry *uniform self,
-                                                  uniform Particle &p,
-                                                  uniform primID_t primID,
-                                                  varying Ray &ray)
+inline varying bool PKDGeometry_intersectPrim(PKDGeometry *uniform self,
+    uniform vec3f &p,
+    uniform primID_t primID,
+    varying Ray &ray)
 {
   // Ray Tracing Gems Chapter 7
-  const vec3f oc = ray.org - make_vec3f(p.pos[0], p.pos[1], p.pos[2]);
-  const float sqrRad = self->particleRadius*self->particleRadius;
+  const vec3f oc = ray.org - p;
+  const float sqrRad = self->global_radius * self->global_radius;
 
-  const float b = dot(-1.0f*oc, ray.dir);
-  const vec3f temp = oc + b*ray.dir;
+  const float b = dot(-1.0f * oc, ray.dir);
+  const vec3f temp = oc + b * ray.dir;
   const float delta = sqrRad - dot(temp, temp);
 
-  if (delta < 0.0f) return false;
+  if (delta < 0.0f)
+    return false;
 
   const float c = dot(oc, oc) - sqrRad;
   const float sign = signbits(b) ? 1.0f : -1.0f;
-  const float q = b+sign*sqrt(delta);
+  const float q = b + sign * sqrt(delta);
 
   {
-    const float temp = min(c/q,q);
+    const float temp = min(c / q, q);
     if (temp > ray.t0 && temp < ray.t) {
       ray.primID = primID;
-      ray.geomID = self->geometry.geomID;
-      ray.t      = temp;
-      ray.Ng     = ray.t * ray.dir + oc;
+      //ray.geomID = self->super.geomID;
+      ray.t = temp;
+      ray.Ng = ray.t * ray.dir + oc;
       return true;
     }
   }
   return false;
-#if 0
-  // perform first half of intersection test ....
-  const vec3f A = make_vec3f(p.pos[0], p.pos[1], p.pos[2]) - ray.org;
-
-  const float a  = dot(ray.dir, ray.dir);
-  const float b  = -2.f * dot(ray.dir, A);
-  const float AA = dot(A, A);
-#if LOD
-  const float radius =
-      self->particleRadius * max(1.f, (1.f / 16.f) * sqrt(sqrt(AA)));
-#else
-  const float radius = self->particleRadius;
-#endif
-  const float c = AA - radius * radius;
-
-  const float radical = b * b - 4.f * a * c;
-  if (radical < 0.f)
-    return false;
-
-  // if (dbg) print("ISEC1\n");
-  // compute second half of intersection test
-  const float srad = sqrt(radical);
-
-  const float t_in  = (-b - srad) * rcpf(a + a);
-  const float t_out = (-b + srad) * rcpf(a + a);
-
-  float hit_t = 0.f;
-  if (t_in > ray.t0 && t_in < ray.t) {
-    hit_t = t_in;
-  } else if (t_out > (ray.t0 + self->epsilon) && t_out < ray.t) {
-    hit_t = t_out;
-  } else /* miss : */
-    return false;
-
-  // if (dbg) print("ISEC2\n");
-  // do attribute alpha test, if both attribute and transfer fct are set
-#if !PKD_LIDAR_ENABLED
-  if ((self->attribute!=NULL) & (self->transferFunction!=NULL)) {
-    // -------------------------------------------------------
-    // do attribute test
-    uniform float attrib = self->attribute[primID];
-
-    // normalize attribute to the [0,1] range (by normalizing relative
-    // to the attribute range stored in the min max BVH's root node
-    const uniform float attrib_lo = self->attr_lo;
-    const uniform float attrib_hi = self->attr_hi;
-
-    attrib = (attrib - attrib_lo) * rcp(attrib_hi - attrib_lo + 1e-10f);
-
-    // compute alpha value from attribute value
-    const float alpha
-      = self->transferFunction->getOpacityForValue(self->transferFunction,attrib);
-
-    if (alpha <= .5f) {
-      return false;
-    }
-  }
-#endif
-
-  // if (dbg) print("ISEC3\n");
-  // found a hit - store it
-  ray.primID = primID;
-  ray.geomID = self->geometry.geomID;
-  ray.t      = t_in;
-  ray.Ng     = ray.t * ray.dir - A;
-  // if (dbg) print("LEAVE ISEC HIT\n");
-  return true;
-#endif
 }
 
 struct ThreePhaseStackEntry
@@ -138,19 +71,29 @@ struct ThreePhaseStackEntry
   varying float t_in, t_out, t_sphere_out;
   uniform primID_t sphereID;
   uniform primID_t farChildID;
-  // #if DIM_FROM_DEPTH
-  //   uniform int32  dim;
-  // #endif
 };
 
-inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
-                                varying Ray &ray,
-                                const varying float rdir[3],
-                                const varying float org[3],
-                                const varying float t_in_0,
-                                const varying float t_out_0,
-                                const uniform size_t dir_sign[3],
-                                const uniform bool isShadowRay)
+uniform float get_coord(uniform vec3f const& p, int dim) {
+  if (dim == 0)
+    return p.x;
+  if (dim == 1)
+    return p.y;
+  if (dim == 2)
+    return p.z;
+}
+
+uniform unsigned int get_dim(uniform float const& x) {
+  return (uniform unsigned int)x & 3;
+}
+
+inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
+    varying Ray &ray,
+    const varying float rdir[3],
+    const varying float org[3],
+    const varying float t_in_0,
+    const varying float t_out_0,
+    const uniform size_t dir_sign[3],
+    const uniform bool isShadowRay)
 {
   // ++rayID;
   // print("Ray %\n",rayID);
@@ -160,16 +103,16 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
   varying ThreePhaseStackEntry *uniform stackPtr = stack;
 
   uniform primID_t nodeID = 0;
-  uniform size_t dim      = 0;
+  uniform size_t dim = 0;
 
-  float t_in                                        = t_in_0;
-  float t_out                                       = t_out_0;
-  const float radius                                = self->particleRadius;
-  const uniform primID_t numInnerNodes              = self->numInnerNodes;
-  const uniform primID_t numParticles               = self->numParticles;
-  const uniform PKDParticle *uniform const particle = self->particle;
+  float t_in = t_in_0;
+  float t_out = t_out_0;
+  const float radius = self->global_radius;
+  const uniform primID_t numInnerNodes = self->num_innerNodes;
+  const uniform primID_t numParticles = self->num_particles;
+  //const uniform PKDParticle *uniform const particle = self->position;
   // if (dbg) print("ENTER TRAVERSAL\n");
-  uniform Particle p;
+  uniform vec3f p;
   while (1) {
     // ------------------------------------------------------------------
     // do traversal step(s) as long as possible
@@ -181,27 +124,14 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
       if (t_in > t_out)
         break;
 
-      getParticle(self, p, nodeID);
-
-#if LOD
-      const float dist_lod = max(1.f, (1.f / 16.f) * sqrt(t_in));
-      if (nodeID > 4096) {
-        uniform Particle parent;
-        getParticle(self, parent, (nodeID - 1) >> 1);
-        uniform vec3f d = make_vec3f(p.pos[0] - parent.pos[0],
-                                     p.pos[1] - parent.pos[1],
-                                     p.pos[2] - parent.pos[2]);
-        // if distance is < 1 pixel, previous point was "good enough"; break;
-        if (dot(d, d) < dist_lod)
-          break;
-      }
-#endif
+      //getParticle(self, p, nodeID);
+      p = get_vec3f(self->position, nodeID);
 
       if (nodeID >= numInnerNodes) {
         // this is a leaf node - can't to to a leaf, anyway. Intersect
         // the prim, and be done with it.
         // if (dbg) print("LEAFISEC0\n");
-        PartiKDGeometry_intersectPrim(self, p, nodeID, ray);
+        PKDGeometry_intersectPrim(self, p, nodeID, ray);
         // if (dbg) print("LEAFISEC1\n");
         if (isShadowRay && ray.primID >= 0)
           return;
@@ -209,17 +139,17 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
       }
 
       // TODO: This is cullign incorrectly?
-      if (self->innerNode_attributeMask) {
+      /*if (self->innerNode_attributeMask) {
         const uniform uint32 nodeAttrBits =
             self->innerNode_attributeMask[nodeID];
         if ((nodeAttrBits & self->transferFunction_activeBinBits) == 0)
           break;
-      }
+      }*/
 
       // #if !DIM_FROM_DEPTH
       // INT3 *uniform intPtr = (INT3 *uniform)self->particle;
       // dim = intPtr[nodeID].x & 3;
-      dim = p.dim;
+      dim = get_dim(get_coord(p, 0));
       // #endif
 
       const uniform size_t sign = dir_sign[dim];
@@ -228,19 +158,16 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
       // traversal step: compute distance, then compute intervals for front and
       // back side
       // ------------------------------------------------------------------
-      const float org_to_node_dim = p.pos[dim] - org[dim];
-#if LOD
-      const float t_plane_0 = (org_to_node_dim - radius * dist_lod) * rdir[dim];
-      const float t_plane_1 = (org_to_node_dim + radius * dist_lod) * rdir[dim];
-#else
+      const float org_to_node_dim = get_coord(p, dim) - org[dim];
+
       const float t_plane_0 = (org_to_node_dim - radius) * rdir[dim];
       const float t_plane_1 = (org_to_node_dim + radius) * rdir[dim];
-#endif
+
       const float t_plane_nr = min(t_plane_0, t_plane_1);
       const float t_plane_fr = max(t_plane_0, t_plane_1);
 
-      const float t_farChild_in   = max(t_in, t_plane_nr);
-      const float t_farChild_out  = t_out;
+      const float t_farChild_in = max(t_in, t_plane_nr);
+      const float t_farChild_out = t_out;
       const float t_nearChild_out = min(t_out, t_plane_fr);
 
       // catch the case where all ray segments are on far side
@@ -248,8 +175,8 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
         if (none(t_farChild_in < t_farChild_out)) {
           break;
         } else {
-          t_in   = t_farChild_in;
-          t_out  = t_farChild_out;
+          t_in = t_farChild_in;
+          t_out = t_farChild_out;
           nodeID = 2 * nodeID + 2 - sign;
           continue;
         }
@@ -257,22 +184,18 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
 
       unmasked
       {
-        stackPtr->t_in         = 1e20f;
-        stackPtr->t_out        = -1e20f;
+        stackPtr->t_in = 1e20f;
+        stackPtr->t_out = -1e20f;
         stackPtr->t_sphere_out = -1e20f;
       }
       stackPtr->farChildID = 2 * nodeID + 2 - sign;
 
-      stackPtr->t_in         = t_farChild_in;
-      stackPtr->t_out        = t_farChild_out;
+      stackPtr->t_in = t_farChild_in;
+      stackPtr->t_out = t_farChild_out;
       stackPtr->t_sphere_out = t_nearChild_out;
 
       t_out = t_nearChild_out;
-#if DIM_FROM_DEPTH
-      dim = (dim == 2) ? 0 : dim + 1;
 
-      stackPtr->dim = dim;
-#endif
       stackPtr->sphereID = nodeID;
 
       if (any(t_farChild_in < t_farChild_out))
@@ -297,7 +220,7 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
       }
       unmasked
       {
-        t_in  = stackPtr[-1].t_in;
+        t_in = stackPtr[-1].t_in;
         t_out = min(stackPtr[-1].t_out, ray.t);
       }
       --stackPtr;
@@ -309,9 +232,10 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
 
       // intersect the actual node...
       if (t_in < min(stackPtr->t_sphere_out, ray.t)) {
-        uniform Particle p;
-        getParticle(self, p, stackPtr->sphereID);
-        PartiKDGeometry_intersectPrim(self, p, stackPtr->sphereID, ray);
+        /*uniform Particle p;
+        getParticle(self, p, stackPtr->sphereID);*/
+        uniform vec3f p = get_vec3f(self->position, stackPtr->sphereID);
+        PKDGeometry_intersectPrim(self, p, stackPtr->sphereID, ray);
         if (isShadowRay && ray.primID >= 0)
           return;
       }
@@ -337,12 +261,15 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
   subpackets of equal sige, and then calls the appropiate
   constant-sign traverse function. this method works for both shadow
   and primary rays, as indicated by the 'isShadowRay' flag */
-inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
-                                varying Ray &ray,
-                                uniform bool isShadowRay)
+inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
+    varying Ray &ray,
+    uniform bool isShadowRay)
 {
   float t_in = ray.t0, t_out = ray.t;
-  intersectBox(ray, self->sphereBounds, t_in, t_out);
+  //intersectBox(ray, self->bounds, t_in, t_out);
+  Intersections isect = intersectBox(ray.org, ray.dir, self->bounds);
+  t_in = isect.entry.t;
+  t_out = isect.exit.t;
 
   if (t_out < t_in)
     return;
@@ -406,35 +333,38 @@ inline void pkd_traverse_packet(uniform PartiKDGeometry *uniform self,
 }
 
 /*! the 'virtual' traverse function for a pkd geometry */
-unmasked void PartiKDGeometry_intersect_packet(const struct RTCIntersectFunctionNArguments *uniform args)
+unmasked void PKDGeometry_intersect_packet(
+    const struct RTCIntersectFunctionNArguments *uniform args)
 {
   if (!args->valid[programIndex]) {
     return;
   }
   // this assumes that the args->rayhit is actually a pointer toa varying ray!
-  varying Ray *uniform ray = (varying Ray *uniform)args->rayhit;
-  uniform PartiKDGeometry *uniform self = (uniform PartiKDGeometry *uniform)args->geometryUserPtr;
+  varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
+  uniform PKDGeometry *uniform self =
+      (uniform PKDGeometry * uniform) args->geometryUserPtr;
 
   pkd_traverse_packet(self, *ray, false);
-  if (ray->geomID == self->geometry.geomID) {
+  /*if (ray->geomID == self->super.geomID) {
     ray->instID = args->context->instID[0];
-  }
+  }*/
 }
 
 /*! the 'virtual' occluded function for a pkd geometry */
-unmasked void PartiKDGeometry_occluded_packet(const struct RTCIntersectFunctionNArguments *uniform args)
+unmasked void PKDGeometry_occluded_packet(
+    const struct RTCIntersectFunctionNArguments *uniform args)
 {
   if (!args->valid[programIndex]) {
     return;
   }
   // this assumes that the args->rayhit is actually a pointer toa varying ray!
-  varying Ray *uniform ray = (varying Ray *uniform)args->rayhit;
-  uniform PartiKDGeometry *uniform self = (uniform PartiKDGeometry *uniform)args->geometryUserPtr;
+  varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
+  uniform PKDGeometry *uniform self =
+      (uniform PKDGeometry * uniform) args->geometryUserPtr;
 
   pkd_traverse_packet(self, *ray, false);
-  if (ray->geomID == self->geometry.geomID) {
+  /*if (ray->geomID == self->super.geomID) {
     ray->instID = args->context->instID[0];
     ray->t = neg_inf;
-  }
+  }*/
 }
-

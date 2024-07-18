@@ -19,12 +19,12 @@
 // ======================================================================== //
 
 // ospray
-#include "ospray/math/vec.ih"
-#include "ospray/math/box.ih"
-#include "ospray/common/Ray.ih"
-#include "ospray/common/Model.ih"
-#include "ospray/geometry/Geometry.ih"
-#include "ospray/transferFunction/LinearTransferFunction.ih"
+#include "rkcommon/math/vec.ih"
+#include "rkcommon/math/box.ih"
+#include "common/Ray.ih"
+//#include "ospray/common/Model.ih"
+#include "geometry/Geometry.ih"
+//#include "ospray/transferFunction/LinearTransferFunction.ih"
 
 #define USE_NAIVE_SPMD_TRAVERSAL 0
 
@@ -32,158 +32,158 @@
     properly handle the (&vec3f.x)[dim] expression we need to get a
     particular dimenesion of a vec3f, we have to use a float[3]
     instead (ispc issue #925) */
-struct PKDParticle {
-  float position[3];
-};
-
-struct PKDParticle4 {
-    float position[3];
-    unsigned int color;
-};
-
-struct INT3 {
-  int32 x,y,z;
-};
-
-/*! OSPRay Geometry for a Particle KD Tree geometry type */
-struct PartiKDGeometry {
-  //! inherited geometry fields  
-  uniform Geometry geometry;
-
-  //! flag specifying whether this is a quantized version of the particles
-  bool isQuantized;
-
-  //! flag specifying that color is encoded in the fourth position component
-  bool isVec4;
-
-  //! specifies type of color: o none, 1 RGBu8, 2 RGBAu8, 3 RGBf, 4 RGBAf, 5 I
-  int colorType;
-
-  //! number of particles
-  uint64 numParticles;
-  //! number of inner nodes
-  uint64 numInnerNodes;
-
-  //! array of particles, in kd-tree order
-  PKDParticle *uniform particle;
-  
-  // /*! gives the split dim for each inner node (if non-round robin
-  //   split dim was used during construction), or NULL (in which case
-  //   dim==(depth%3) */
-  // unsigned int32 *innerNode_splitDim; 
-
-  //! bounding box of particle centers
-  box3f centerBounds;
-
-  //! bounding box of complete particles (centerBounds+radius)
-  box3f sphereBounds;
-
-  /*! (maximum) particle radius */
-  float particleRadius;
-
-  /*! ray epsilon to avoid self-intersections, like the spheres geom */
-  float epsilon;
-
-
-  // -------------------------------------------------------------------------
-  // THE FOLLOWING VALUES WILL ONLY BE SET FOR PKD-GEOMETRIES WITH ATTRIBUTES:
-  // -------------------------------------------------------------------------
-
-  /*! transfer function to be used for color (and alpha) mapping. only
-      valid if attribtue is set */
-  uniform TransferFunction *uniform transferFunction;
-
-  /*! bits of which bins in the transfer function are active */
-  uniform uint32 transferFunction_activeBinBits;
-
-  //! array of attributes for culling. 'NULL' means 'no attribute on
-  //! this'
-  float *uniform attribute;
-  /*! @{ lower and upper bounds for attribute, for normalizing
-      attribute value */
-  float attr_lo, attr_hi;
-  /*! @} */
-
-  /*! info for hierarchical culling (if non-NULL): one uint per
-    inner node, giving a 16-bit mask of which bins of attribute values
-    are present in the given subtree. Will be NULL if and only if
-    attribute array is NULL. */
-  const unsigned uint32 *innerNode_attributeMask;
-};
+//struct PKDParticle {
+//  float position[3];
+//};
+//
+//struct PKDParticle4 {
+//    float position[3];
+//    unsigned int color;
+//};
+//
+//struct INT3 {
+//  int32 x,y,z;
+//};
+//
+///*! OSPRay Geometry for a Particle KD Tree geometry type */
+//struct PartiKDGeometry {
+//  //! inherited geometry fields  
+//  uniform Geometry geometry;
+//
+//  //! flag specifying whether this is a quantized version of the particles
+//  bool isQuantized;
+//
+//  //! flag specifying that color is encoded in the fourth position component
+//  bool isVec4;
+//
+//  //! specifies type of color: o none, 1 RGBu8, 2 RGBAu8, 3 RGBf, 4 RGBAf, 5 I
+//  int colorType;
+//
+//  //! number of particles
+//  uint64 numParticles;
+//  //! number of inner nodes
+//  uint64 numInnerNodes;
+//
+//  //! array of particles, in kd-tree order
+//  PKDParticle *uniform particle;
+//  
+//  // /*! gives the split dim for each inner node (if non-round robin
+//  //   split dim was used during construction), or NULL (in which case
+//  //   dim==(depth%3) */
+//  // unsigned int32 *innerNode_splitDim; 
+//
+//  //! bounding box of particle centers
+//  box3f centerBounds;
+//
+//  //! bounding box of complete particles (centerBounds+radius)
+//  box3f sphereBounds;
+//
+//  /*! (maximum) particle radius */
+//  float particleRadius;
+//
+//  /*! ray epsilon to avoid self-intersections, like the spheres geom */
+//  float epsilon;
+//
+//
+//  // -------------------------------------------------------------------------
+//  // THE FOLLOWING VALUES WILL ONLY BE SET FOR PKD-GEOMETRIES WITH ATTRIBUTES:
+//  // -------------------------------------------------------------------------
+//
+//  /*! transfer function to be used for color (and alpha) mapping. only
+//      valid if attribtue is set */
+//  uniform TransferFunction *uniform transferFunction;
+//
+//  /*! bits of which bins in the transfer function are active */
+//  uniform uint32 transferFunction_activeBinBits;
+//
+//  //! array of attributes for culling. 'NULL' means 'no attribute on
+//  //! this'
+//  float *uniform attribute;
+//  /*! @{ lower and upper bounds for attribute, for normalizing
+//      attribute value */
+//  float attr_lo, attr_hi;
+//  /*! @} */
+//
+//  /*! info for hierarchical culling (if non-NULL): one uint per
+//    inner node, giving a 16-bit mask of which bins of attribute values
+//    are present in the given subtree. Will be NULL if and only if
+//    attribute array is NULL. */
+//  const unsigned uint32 *innerNode_attributeMask;
+//};
 
 inline float safe_rcp(float f) 
 { return (abs(f) < 1e-20f)?1e20f:rcp(f); }
 
-void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
-                                   uniform Model *uniform model,
-                                   varying DifferentialGeometry &dg,
-                                   const varying Ray &ray,
-                                   uniform int64 flags);
+//void PartiKDGeometry_postIntersect(uniform Geometry *uniform geometry,
+//                                   uniform Model *uniform model,
+//                                   varying DifferentialGeometry &dg,
+//                                   const varying Ray &ray,
+//                                   uniform int64 flags);
 
-unmasked void PartiKDGeometry_intersect_spmd(const struct RTCIntersectFunctionNArguments *uniform args);
-unmasked void PartiKDGeometry_occluded_spmd(const struct RTCIntersectFunctionNArguments *uniform args);
+//unmasked void PartiKDGeometry_intersect_spmd(const struct RTCIntersectFunctionNArguments *uniform args);
+//unmasked void PartiKDGeometry_occluded_spmd(const struct RTCIntersectFunctionNArguments *uniform args);
 
-unmasked void PartiKDGeometry_intersect_packet(const struct RTCIntersectFunctionNArguments *uniform args);
-unmasked void PartiKDGeometry_occluded_packet(const struct RTCIntersectFunctionNArguments *uniform args);
+unmasked void PKDGeometry_intersect_packet(const struct RTCIntersectFunctionNArguments *uniform args);
+unmasked void PKDGeometry_occluded_packet(const struct RTCIntersectFunctionNArguments *uniform args);
 
 typedef uint32 primID_t;
 
-struct Particle {
-  float pos[3];
-  uint32 dim;
-};
-
-inline void getParticle(PartiKDGeometry *uniform self,
-                        uniform Particle &p, 
-                        uniform primID_t primID)
-{
-  if (self->isQuantized) {
-    const uniform int64 offset = primID;
-    const uniform uint64 *uniform pos = (const uniform uint64 *uniform)&self->particle[0].position[0];
-    pos += offset;
-    
-    uniform uint64 bits = pos[0];
-    const uniform uint32 mask = (1<<20)-1;
-    p.dim = bits & 3;
-    uniform uint32 ix = (bits >> 2) & mask;
-    uniform uint32 iy = (bits >> 22) & mask;
-    uniform uint32 iz = (bits >> 42) & mask;
-    p.pos[0] = ix;
-    p.pos[1] = iy;
-    p.pos[2] = iz;
-  } else if (self->isVec4) {
-    const uniform int64 offset = 4*primID;
-    const uniform float *uniform pos = &self->particle[0].position[0];
-    pos += offset;
-    p.dim = ((int *uniform)pos)[0] & 3;
-    p.pos[0] = pos[0];
-    p.pos[1] = pos[1];
-    p.pos[2] = pos[2];
-  } else {
-    const uniform int64 offset = 3*primID;
-    const uniform float *uniform pos = &self->particle[0].position[0];
-    pos += offset;
-    p.dim = ((int *uniform)pos)[0] & 3;
-    p.pos[0] = pos[0];
-    p.pos[1] = pos[1];
-    p.pos[2] = pos[2];
-  }
-}
-
-inline void getParticle(PartiKDGeometry *uniform self,
-                        varying Particle &p, 
-                        varying primID_t primID)
-{
-  if (self->isVec4) {
-    const varying int64 offset = 4*primID;
-    const uniform float *varying pos = &self->particle[0].position[0];
-    pos += offset;
-    p.dim = ((int *varying)pos)[0] & 3;
-    p.pos[0] = pos[0];
-    p.pos[1] = pos[1];
-    p.pos[2] = pos[2];
-  }
-}
+//struct Particle {
+//  float pos[3];
+//  uint32 dim;
+//};
+//
+//inline void getParticle(PartiKDGeometry *uniform self,
+//                        uniform Particle &p, 
+//                        uniform primID_t primID)
+//{
+//  if (self->isQuantized) {
+//    const uniform int64 offset = primID;
+//    const uniform uint64 *uniform pos = (const uniform uint64 *uniform)&self->particle[0].position[0];
+//    pos += offset;
+//    
+//    uniform uint64 bits = pos[0];
+//    const uniform uint32 mask = (1<<20)-1;
+//    p.dim = bits & 3;
+//    uniform uint32 ix = (bits >> 2) & mask;
+//    uniform uint32 iy = (bits >> 22) & mask;
+//    uniform uint32 iz = (bits >> 42) & mask;
+//    p.pos[0] = ix;
+//    p.pos[1] = iy;
+//    p.pos[2] = iz;
+//  } else if (self->isVec4) {
+//    const uniform int64 offset = 4*primID;
+//    const uniform float *uniform pos = &self->particle[0].position[0];
+//    pos += offset;
+//    p.dim = ((int *uniform)pos)[0] & 3;
+//    p.pos[0] = pos[0];
+//    p.pos[1] = pos[1];
+//    p.pos[2] = pos[2];
+//  } else {
+//    const uniform int64 offset = 3*primID;
+//    const uniform float *uniform pos = &self->particle[0].position[0];
+//    pos += offset;
+//    p.dim = ((int *uniform)pos)[0] & 3;
+//    p.pos[0] = pos[0];
+//    p.pos[1] = pos[1];
+//    p.pos[2] = pos[2];
+//  }
+//}
+//
+//inline void getParticle(PartiKDGeometry *uniform self,
+//                        varying Particle &p, 
+//                        varying primID_t primID)
+//{
+//  if (self->isVec4) {
+//    const varying int64 offset = 4*primID;
+//    const uniform float *varying pos = &self->particle[0].position[0];
+//    pos += offset;
+//    p.dim = ((int *varying)pos)[0] & 3;
+//    p.pos[0] = pos[0];
+//    p.pos[1] = pos[1];
+//    p.pos[2] = pos[2];
+//  }
+//}
                         
 
 
