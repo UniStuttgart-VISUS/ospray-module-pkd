@@ -112,6 +112,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   const uniform primID_t numParticles = self->num_particles;
   //const uniform PKDParticle *uniform const particle = self->position;
   // if (dbg) print("ENTER TRAVERSAL\n");
+  print("ENTER TRAVERSAL\n");
   uniform vec3f p;
   while (1) {
     // ------------------------------------------------------------------
@@ -133,6 +134,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         // if (dbg) print("LEAFISEC0\n");
         PKDGeometry_intersectPrim(self, p, nodeID, ray);
         // if (dbg) print("LEAFISEC1\n");
+        print("LEAFISEC1\n");
         if (isShadowRay && ray.primID >= 0)
           return;
         break;
@@ -215,6 +217,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     while (1) {
       // if (dbg) print("POP\n");
       // pop as long as we have to ... or until nothing is left to pop.
+      print("POP\n");
       if (stackPtr == stack) {
         return;
       }
@@ -255,6 +258,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     }
   }
   // if (dbg) print("DONE TRAVERSAL\n");
+  print("DONE TRAVERSAL\n");
 }
 
 /*! generic traverse/occluded function that splits the packet into
@@ -274,7 +278,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   if (t_out < t_in)
     return;
 
-  print("TRAVERSE1\n");
+  //print("TRAVERSE1\n");
 
   const varying float rdir[3] = {
       safe_rcp(ray.dir.x), safe_rcp(ray.dir.y), safe_rcp(ray.dir.z)};
