@@ -123,7 +123,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         // if (dbg) print("LEAFISEC1\n");
         if (isShadowRay && ray.primID >= 0)
           return;
-        break;
+        //break;
       }
 
       // #if !DIM_FROM_DEPTH
