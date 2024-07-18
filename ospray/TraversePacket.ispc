@@ -36,7 +36,8 @@
 inline varying bool PKDGeometry_intersectPrim(PKDGeometry *uniform self,
     uniform PKDParticle &p,
     uniform primID_t primID,
-    varying Ray &ray)
+    varying Ray &ray,
+    const struct RTCIntersectFunctionNArguments *uniform args)
 {
   // Ray Tracing Gems Chapter 7
   const vec3f oc = ray.org - make_vec3f(p.position[0], p.position[1], p.position[2]);
@@ -57,7 +58,7 @@ inline varying bool PKDGeometry_intersectPrim(PKDGeometry *uniform self,
     const float temp = min(c / q, q);
     if (temp > ray.t0 && temp < ray.t) {
       ray.primID = primID;
-      //ray.geomID = self->super.geomID;
+      ray.geomID = args->geomID;
       ray.t = temp;
       ray.Ng = ray.t * ray.dir + oc;
       return true;
@@ -93,7 +94,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     const varying float t_in_0,
     const varying float t_out_0,
     const uniform size_t dir_sign[3],
-    const uniform bool isShadowRay)
+    const uniform bool isShadowRay,
+    const struct RTCIntersectFunctionNArguments *uniform args)
 {
   // ++rayID;
   // print("Ray %\n",rayID);
@@ -132,7 +134,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         // this is a leaf node - can't to to a leaf, anyway. Intersect
         // the prim, and be done with it.
         // if (dbg) print("LEAFISEC0\n");
-        PKDGeometry_intersectPrim(self, p, nodeID, ray);
+        PKDGeometry_intersectPrim(self, p, nodeID, ray, args);
         // if (dbg) print("LEAFISEC1\n");
         if (dbg) print("LEAFISEC1 % %\n", nodeID, numInnerNodes);
         if (dbg)
@@ -251,7 +253,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         /*uniform Particle p;
         getParticle(self, p, stackPtr->sphereID);*/
         uniform PKDParticle p = particle[stackPtr->sphereID];
-        PKDGeometry_intersectPrim(self, p, stackPtr->sphereID, ray);
+        PKDGeometry_intersectPrim(self, p, stackPtr->sphereID, ray, args);
         if (isShadowRay && ray.primID >= 0)
           return;
       }
@@ -281,7 +283,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   and primary rays, as indicated by the 'isShadowRay' flag */
 inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     varying Ray &ray,
-    uniform bool isShadowRay)
+    uniform bool isShadowRay,
+    const struct RTCIntersectFunctionNArguments *uniform args)
 {
   float t_in = ray.t0, t_out = ray.t;
   //intersectBox(ray, self->bounds, t_in, t_out);
@@ -306,22 +309,22 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       } else {
         dir_sign[0] = 1;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       }
     } else {
       dir_sign[1] = 1;
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       } else {
         dir_sign[0] = 1;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       }
     }
   } else {
@@ -331,22 +334,22 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       } else {
         dir_sign[0] = 1;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       }
     } else {
       dir_sign[1] = 1;
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       } else {
         dir_sign[0] = 1;
         pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay);
+            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
       }
     }
   }
@@ -364,10 +367,10 @@ unmasked void PKDGeometry_intersect_packet(
   uniform PKDGeometry *uniform self =
       (uniform PKDGeometry * uniform) args->geometryUserPtr;
 
-  pkd_traverse_packet(self, *ray, false);
-  /*if (ray->geomID == self->super.geomID) {
+  pkd_traverse_packet(self, *ray, false, args);
+  if (ray->geomID == args->geomID) {
     ray->instID = args->context->instID[0];
-  }*/
+  }
 }
 
 /*! the 'virtual' occluded function for a pkd geometry */
@@ -382,11 +385,9 @@ unmasked void PKDGeometry_occluded_packet(
   uniform PKDGeometry *uniform self =
       (uniform PKDGeometry * uniform) args->geometryUserPtr;
 
-  pkd_traverse_packet(self, *ray, true);
-  if (ray->primID >= 0)
-    ray->t = neg_inf;
-  /*if (ray->geomID == self->super.geomID) {
+  pkd_traverse_packet(self, *ray, false, args);
+  if (ray->geomID == args->geomID) {
     ray->instID = args->context->instID[0];
     ray->t = neg_inf;
-  }*/
+  }
 }
