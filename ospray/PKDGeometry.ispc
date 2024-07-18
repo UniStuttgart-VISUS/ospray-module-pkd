@@ -97,7 +97,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   const uniform float radius                  = self->global_radius;
   const uniform float sqr_radius              = radius*radius;
   const uniform unsigned int numParticles     = self->num_particles;
-  const uniform vec3f *uniform const position = self->position;
+  //const uniform vec3f *uniform const position = self->position;
   // if (dbg) print("ENTER TRAVERSAL\n");
   uniform vec3f p;
   while (1) {
@@ -111,7 +111,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       if (t_in > t_out)
         break;
 
-      p = position[nodeID];
+      p = get_vec3f(self->position, nodeID);
 
       {
         // this is a leaf node - can't to to a leaf, anyway. Intersect
@@ -212,7 +212,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // intersect the actual node...
       if (t_in < min(stackPtr->t_sphere_out, ray.t)) {
         uniform vec3f p;
-        p = position[stackPtr->sphereID];
+        p = get_vec3f(self->position, stackPtr->sphereID);
         PKDGeometry_intersectPrim(p, stackPtr->sphereID, sqr_radius, ray);
         if (isShadowRay && ray.primID >= 0)
           return;
@@ -318,10 +318,10 @@ void PKDGeometry_postIntersect(const Geometry *uniform geometry,
 
     if (flags & DG_COLOR) {
         vec4f color = make_vec4f(self->global_color.x/255.f, self->global_color.y/255.f, self->global_color.z/255.f, self->global_color.w/255.f);
-        if (and(self->color != 0, !self->has_global_color)) {
-            vec4uc tmp_color = self->color[ray.primID];
+        /*if (and(valid(self->color), !self->has_global_color)) {
+            vec4uc tmp_color = get_vec4uc(self->color, ray.primID);
             color = make_vec4f(tmp_color.x/255.f, tmp_color.y/255.f, tmp_color.z/255.f, tmp_color.w/255.f);
-        }
+        }*/
     }
 }
 

@@ -29,8 +29,8 @@ struct PKDGeometry
   // right members (including 'virtual' function pointers, etc)
   Geometry super;
 
-  vec3f *position;
-  vec4uc *color;
+  Data1D position;
+  //Data1D color;
 
   float global_radius;
   vec4uc global_color;
@@ -79,9 +79,7 @@ struct PKDGeometry
 
 #ifdef __cplusplus
   PKDGeometry()
-      : position(0),
-        color(0),
-        global_radius(0.5f),
+      : global_radius(0.5f),
         global_color(vec4uc(255, 0, 0, 255)),
         has_global_color(true),
         num_particles(0)

@@ -60,12 +60,12 @@ void PKDGeometry::commit() {
   bounds.upper.x = boundsData->as<float>()[3];
   bounds.upper.y = boundsData->as<float>()[4];
   bounds.upper.z = boundsData->as<float>()[5];
-
+  
   createEmbreeUserGeometry((RTCBoundsFunction)&ispc::PKDGeometry_bounds,
       (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect,
       (RTCOccludedFunctionN)&ispc::PKDGeometry_occluded);
-  getSh()->position = positionData->data();
-  getSh()->color = colorData->data();
+  getSh()->position = *ispc(positionData);
+  //getSh()->color = *ispc(colorData);
   getSh()->global_radius = global_radius;
   getSh()->has_global_color = has_global_color;
   getSh()->global_color = global_color;
