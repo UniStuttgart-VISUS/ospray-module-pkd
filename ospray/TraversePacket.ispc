@@ -274,6 +274,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   if (t_out < t_in)
     return;
 
+  print("TRAVERSE1\n");
+
   const varying float rdir[3] = {
       safe_rcp(ray.dir.x), safe_rcp(ray.dir.y), safe_rcp(ray.dir.z)};
   const varying float org[3] = {ray.org.x, ray.org.y, ray.org.z};
