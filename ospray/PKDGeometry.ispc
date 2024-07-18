@@ -86,7 +86,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   // print("Ray %\n",rayID);
   // uniform bool dbg = false; //(rayID == 338);
 
-  print("TRAVERSE2\n");
+  //print("TRAVERSE2\n");
 
   varying ThreePhaseStackEntry stack[64];
   varying ThreePhaseStackEntry *uniform stackPtr = stack;
@@ -242,7 +242,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
 {
   float t_in = ray.t0, t_out = ray.t;
   intersectBox(ray, self->bounds, t_in, t_out);
-  print("TRAVERSE1\n");
+  //print("TRAVERSE1\n");
   if (t_out < t_in)
     return;
 
