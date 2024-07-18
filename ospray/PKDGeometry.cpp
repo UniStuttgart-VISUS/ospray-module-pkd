@@ -64,7 +64,7 @@ void PKDGeometry::commit() {
   createEmbreeUserGeometry((RTCBoundsFunction)&ispc::PKDGeometry_bounds,
       (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect,
       (RTCOccludedFunctionN)&ispc::PKDGeometry_occluded);
-  getSh()->position = *ispc(positionData);
+  getSh()->position = positionData->data();
   //getSh()->color = *ispc(colorData);
   getSh()->global_radius = global_radius;
   getSh()->has_global_color = has_global_color;

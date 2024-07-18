@@ -32,10 +32,10 @@
     properly handle the (&vec3f.x)[dim] expression we need to get a
     particular dimenesion of a vec3f, we have to use a float[3]
     instead (ispc issue #925) */
-//struct PKDParticle {
-//  float position[3];
-//};
-//
+struct PKDParticle {
+  float position[3];
+};
+
 //struct PKDParticle4 {
 //    float position[3];
 //    unsigned int color;

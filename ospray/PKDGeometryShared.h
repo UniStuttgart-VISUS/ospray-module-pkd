@@ -29,7 +29,7 @@ struct PKDGeometry
   // right members (including 'virtual' function pointers, etc)
   Geometry super;
 
-  Data1D position;
+  vec3f* position;
   //Data1D color;
 
   float global_radius;

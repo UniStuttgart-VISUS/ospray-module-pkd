@@ -34,12 +34,12 @@
 #define LOD 0
 
 inline varying bool PKDGeometry_intersectPrim(PKDGeometry *uniform self,
-    uniform vec3f &p,
+    uniform PKDParticle &p,
     uniform primID_t primID,
     varying Ray &ray)
 {
   // Ray Tracing Gems Chapter 7
-  const vec3f oc = ray.org - p;
+  const vec3f oc = ray.org - make_vec3f(p.position[0], p.position[1], p.position[2]);
   const float sqrRad = self->global_radius * self->global_radius;
 
   const float b = dot(-1.0f * oc, ray.dir);
@@ -110,10 +110,11 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   const float radius = self->global_radius;
   const uniform primID_t numInnerNodes = self->num_innerNodes;
   const uniform primID_t numParticles = self->num_particles;
-  //const uniform PKDParticle *uniform const particle = self->position;
+  const uniform PKDParticle *uniform const particle =
+      (PKDParticle * uniform const) self->position;
   // if (dbg) print("ENTER TRAVERSAL\n");
   print("ENTER TRAVERSAL\n");
-  uniform vec3f p;
+  uniform PKDParticle p;
   while (1) {
     // ------------------------------------------------------------------
     // do traversal step(s) as long as possible
@@ -126,7 +127,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         break;
 
       //getParticle(self, p, nodeID);
-      p = get_vec3f(self->position, nodeID);
+      p = particle[nodeID];
 
       if (nodeID >= numInnerNodes) {
         // this is a leaf node - can't to to a leaf, anyway. Intersect
@@ -151,7 +152,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // #if !DIM_FROM_DEPTH
       // INT3 *uniform intPtr = (INT3 *uniform)self->particle;
       // dim = intPtr[nodeID].x & 3;
-      dim = get_dim(get_coord(p, 0));
+      dim = get_dim(p.position[0]);
       // #endif
       print("DIM %\n", dim);
 
@@ -161,7 +162,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // traversal step: compute distance, then compute intervals for front and
       // back side
       // ------------------------------------------------------------------
-      const float org_to_node_dim = get_coord(p, dim) - org[dim];
+      const float org_to_node_dim = p.position[dim] - org[dim];
+      //const float org_to_node_dim = get_coord(p, dim) - org[dim];
 
       const float t_plane_0 = (org_to_node_dim - radius) * rdir[dim];
       const float t_plane_1 = (org_to_node_dim + radius) * rdir[dim];
@@ -239,7 +241,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       if (t_in < min(stackPtr->t_sphere_out, ray.t)) {
         /*uniform Particle p;
         getParticle(self, p, stackPtr->sphereID);*/
-        uniform vec3f p = get_vec3f(self->position, stackPtr->sphereID);
+        uniform PKDParticle p = particle[stackPtr->sphereID];
         PKDGeometry_intersectPrim(self, p, stackPtr->sphereID, ray);
         if (isShadowRay && ray.primID >= 0)
           return;
