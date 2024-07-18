@@ -132,7 +132,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       //dim = p.dim;
       dim = (*((unsigned int *uniform)&p.x)) & 3;
       // #endif
-      print("DIM %\n", dim);
+      //print("DIM %\n", dim);
 
       const uniform size_t sign = dir_sign[dim];
 
