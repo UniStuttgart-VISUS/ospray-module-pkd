@@ -153,6 +153,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // dim = intPtr[nodeID].x & 3;
       dim = get_dim(get_coord(p, 0));
       // #endif
+      print("DIM %\n", dim);
 
       const uniform size_t sign = dir_sign[dim];
 
@@ -219,6 +220,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // pop as long as we have to ... or until nothing is left to pop.
       print("POP\n");
       if (stackPtr == stack) {
+        print("LEAVE TRAVERSAL\n");
         return;
       }
       unmasked
