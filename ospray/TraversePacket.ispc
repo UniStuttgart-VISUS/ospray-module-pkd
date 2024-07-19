@@ -385,7 +385,7 @@ unmasked void PKDGeometry_occluded_packet(
   uniform PKDGeometry *uniform self =
       (uniform PKDGeometry * uniform) args->geometryUserPtr;
 
-  pkd_traverse_packet(self, *ray, false, args);
+  pkd_traverse_packet(self, *ray, true, args);
   if (ray->geomID == args->geomID) {
     ray->instID = args->context->instID[0];
     ray->t = neg_inf;
