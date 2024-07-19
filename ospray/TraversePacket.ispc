@@ -105,7 +105,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   varying ThreePhaseStackEntry *uniform stackPtr = stack;
 
   uniform primID_t nodeID = 0;
-  uniform size_t dim = 0;
+  uniform unsigned int dim = 0;
 
   float t_in = t_in_0;
   float t_out = t_out_0;
@@ -159,7 +159,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       //dim = ((unsigned int)p.position[0]) & 3;
       {
         const uniform float *uniform pos = &p.position[0];        
-        dim = ((int *uniform)pos)[0] & 3;
+        dim = ((unsigned int *uniform)pos)[0] & 3;
       }
       // #endif
       /*if (dbg)
