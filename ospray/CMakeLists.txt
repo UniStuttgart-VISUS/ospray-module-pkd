@@ -35,3 +35,5 @@ target_include_directories(ospray_module_pkd
     # For ISPC module generated ispc headers
     ${PROJECT_BINARY_DIR}/ospray/
 )
+
+ospray_install_library(ospray_module_pkd lib)
