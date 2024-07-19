@@ -65,7 +65,7 @@ void PKDGeometry::commit() {
       (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect,
       (RTCOccludedFunctionN)&ispc::PKDGeometry_occluded);
   getSh()->position = positionData->data();
-  getSh()->color = colorData->data();
+  getSh()->color = has_global_color ? nullptr : colorData->data();
   getSh()->global_radius = global_radius;
   getSh()->has_global_color = has_global_color;
   getSh()->global_color = global_color;
