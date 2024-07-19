@@ -101,7 +101,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   // print("Ray %\n",rayID);
   //uniform bool dbg = false; //(rayID == 338);
 
-  varying ThreePhaseStackEntry stack[64];
+  varying ThreePhaseStackEntry stack[32];
   varying ThreePhaseStackEntry *uniform stackPtr = stack;
 
   uniform primID_t nodeID = 0;
