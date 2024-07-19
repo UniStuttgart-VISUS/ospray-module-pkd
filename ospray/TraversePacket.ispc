@@ -93,7 +93,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     const varying float org[3],
     const varying float t_in_0,
     const varying float t_out_0,
-    const uniform size_t dir_sign[3],
+    const uniform unsigned int dir_sign[3],
     const uniform bool isShadowRay,
     const struct RTCIntersectFunctionNArguments *uniform args)
 {
@@ -165,7 +165,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       /*if (dbg)
         print("DIM %\n", dim);*/
 
-      const uniform size_t sign = dir_sign[dim];
+      const uniform unsigned int sign = dir_sign[dim];
 
       // ------------------------------------------------------------------
       // traversal step: compute distance, then compute intervals for front and
@@ -301,7 +301,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       safe_rcp(ray.dir.x), safe_rcp(ray.dir.y), safe_rcp(ray.dir.z)};
   const varying float org[3] = {ray.org.x, ray.org.y, ray.org.z};
 
-  uniform size_t dir_sign[3];
+  uniform unsigned int dir_sign[3];
   if (ray.dir.z > 0.f) {
     dir_sign[2] = 0;
     if (ray.dir.y > 0.f) {
