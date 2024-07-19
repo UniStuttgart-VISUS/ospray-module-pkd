@@ -30,7 +30,7 @@ struct PKDGeometry
   Geometry super;
 
   vec3f* position;
-  //Data1D color;
+  vec4uc* color;
 
   float global_radius;
   vec4uc global_color;
