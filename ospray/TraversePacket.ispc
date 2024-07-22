@@ -20,14 +20,14 @@
 
 // ospray
 #include "common/Data.ih"
-#include "common/Ray.ih"
 #include "common/Intersect.ih"
+#include "common/Ray.ih"
 #include "geometry/Geometry.ih"
 #include "rkcommon/math/box.ih"
 #include "rkcommon/math/vec.ih"
 // this module
-#include "PKDGeometryShared.h"
 #include "PKDGeometry.ih"
+#include "PKDGeometryShared.h"
 
 // uniform int rayID = 0;
 
@@ -40,7 +40,8 @@ inline varying bool PKDGeometry_intersectPrim(PKDGeometry *uniform self,
     const struct RTCIntersectFunctionNArguments *uniform args)
 {
   // Ray Tracing Gems Chapter 7
-  const vec3f oc = ray.org - make_vec3f(p.position[0], p.position[1], p.position[2]);
+  const vec3f oc =
+      ray.org - make_vec3f(p.position[0], p.position[1], p.position[2]);
   const float sqrRad = self->global_radius * self->global_radius;
 
   const float b = dot(-1.0f * oc, ray.dir);
@@ -74,7 +75,8 @@ struct ThreePhaseStackEntry
   uniform primID_t farChildID;
 };
 
-uniform float get_coord(uniform vec3f const& p, int dim) {
+uniform float get_coord(uniform vec3f const &p, int dim)
+{
   if (dim == 0)
     return p.x;
   if (dim == 1)
@@ -83,7 +85,8 @@ uniform float get_coord(uniform vec3f const& p, int dim) {
     return p.z;
 }
 
-uniform unsigned int get_dim(uniform float const x) {
+uniform unsigned int get_dim(uniform float const x)
+{
   return (uniform unsigned int)x & 3;
 }
 
@@ -95,11 +98,13 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     const varying float t_out_0,
     const uniform unsigned int dir_sign[3],
     const uniform bool isShadowRay,
+    const uniform unsigned int begin,
+    const uniform unsigned int end,
     const struct RTCIntersectFunctionNArguments *uniform args)
 {
   // ++rayID;
   // print("Ray %\n",rayID);
-  //uniform bool dbg = false; //(rayID == 338);
+  // uniform bool dbg = false; //(rayID == 338);
 
   varying ThreePhaseStackEntry stack[32];
   varying ThreePhaseStackEntry *uniform stackPtr = stack;
@@ -110,11 +115,11 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   float t_in = t_in_0;
   float t_out = t_out_0;
   const float radius = self->global_radius;
-  const uniform primID_t numParticles = self->num_particles;
+  const uniform primID_t numParticles = end - begin;
   const uniform primID_t numInnerNodes = numParticles / 2;
   const uniform PKDParticle *uniform const particle =
       (PKDParticle * uniform const) self->position;
-  //if (dbg) print("ENTER TRAVERSAL\n");
+  // if (dbg) print("ENTER TRAVERSAL\n");
   uniform PKDParticle p;
   while (1) {
     // ------------------------------------------------------------------
@@ -127,7 +132,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       if (t_in > t_out)
         break;
 
-      //getParticle(self, p, nodeID);
+      // getParticle(self, p, nodeID);
       p = particle[nodeID];
 
       if (nodeID >= numInnerNodes) {
@@ -136,7 +141,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         // if (dbg) print("LEAFISEC0\n");
         PKDGeometry_intersectPrim(self, p, nodeID, ray, args);
         // if (dbg) print("LEAFISEC1\n");
-        //if (dbg) print("LEAFISEC1 % %\n", nodeID, numInnerNodes);
+        // if (dbg) print("LEAFISEC1 % %\n", nodeID, numInnerNodes);
         /*if (dbg)
           print("POS % % %\n", p.position[0], p.position[1], p.position[2]);*/
         if (isShadowRay && ray.primID >= 0)
@@ -155,10 +160,10 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // #if !DIM_FROM_DEPTH
       // INT3 *uniform intPtr = (INT3 *uniform)self->particle;
       // dim = intPtr[nodeID].x & 3;
-      //dim = get_dim(p.position[0]);
-      //dim = ((unsigned int)p.position[0]) & 3;
+      // dim = get_dim(p.position[0]);
+      // dim = ((unsigned int)p.position[0]) & 3;
       {
-        const uniform float *uniform pos = &p.position[0];        
+        const uniform float *uniform pos = &p.position[0];
         dim = ((unsigned int *uniform)pos)[0] & 3;
       }
       // #endif
@@ -172,7 +177,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       // back side
       // ------------------------------------------------------------------
       const float org_to_node_dim = p.position[dim] - org[dim];
-      //const float org_to_node_dim = get_coord(p, dim) - org[dim];
+      // const float org_to_node_dim = get_coord(p, dim) - org[dim];
 
       const float t_plane_0 = (org_to_node_dim - radius) * rdir[dim];
       const float t_plane_1 = (org_to_node_dim + radius) * rdir[dim];
@@ -287,7 +292,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     const struct RTCIntersectFunctionNArguments *uniform args)
 {
   float t_in = ray.t0, t_out = ray.t;
-  //intersectBox(ray, self->bounds, t_in, t_out);
+  // intersectBox(ray, self->bounds, t_in, t_out);
   Intersections isect = intersectBox(ray.org, ray.dir, self->bounds);
   t_in = isect.entry.t;
   t_out = isect.exit.t;
@@ -295,11 +300,13 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   if (t_out < t_in)
     return;
 
-  //print("TRAVERSE1\n");
+  // print("TRAVERSE1\n");
 
   const varying float rdir[3] = {
       safe_rcp(ray.dir.x), safe_rcp(ray.dir.y), safe_rcp(ray.dir.z)};
   const varying float org[3] = {ray.org.x, ray.org.y, ray.org.z};
+
+  const uniform unsigned int numParticles = self->num_particles;
 
   uniform unsigned int dir_sign[3];
   if (ray.dir.z > 0.f) {
@@ -308,23 +315,59 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       dir_sign[1] = 0;
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       } else {
         dir_sign[0] = 1;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       }
     } else {
       dir_sign[1] = 1;
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       } else {
         dir_sign[0] = 1;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       }
     }
   } else {
@@ -333,23 +376,59 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
       dir_sign[1] = 0;
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       } else {
         dir_sign[0] = 1;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       }
     } else {
       dir_sign[1] = 1;
       if (ray.dir.x > 0.f) {
         dir_sign[0] = 0;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       } else {
         dir_sign[0] = 1;
-        pkd_traverse_packet(
-            self, ray, rdir, org, t_in, t_out, dir_sign, isShadowRay, args);
+        pkd_traverse_packet(self,
+            ray,
+            rdir,
+            org,
+            t_in,
+            t_out,
+            dir_sign,
+            isShadowRay,
+            0,
+            numParticles,
+            args);
       }
     }
   }
