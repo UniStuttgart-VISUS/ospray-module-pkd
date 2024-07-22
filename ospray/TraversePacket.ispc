@@ -289,6 +289,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
 inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
     varying Ray &ray,
     uniform bool isShadowRay,
+    uniform unsigned int begin,
+    uniform unsigned int end,
     const struct RTCIntersectFunctionNArguments *uniform args)
 {
   float t_in = ray.t0, t_out = ray.t;
@@ -305,9 +307,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   const varying float rdir[3] = {
       safe_rcp(ray.dir.x), safe_rcp(ray.dir.y), safe_rcp(ray.dir.z)};
   const varying float org[3] = {ray.org.x, ray.org.y, ray.org.z};
-
-  const uniform unsigned int numParticles = self->num_particles;
-
+  
   uniform unsigned int dir_sign[3];
   if (ray.dir.z > 0.f) {
     dir_sign[2] = 0;
@@ -323,8 +323,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       } else {
         dir_sign[0] = 1;
@@ -336,8 +336,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       }
     } else {
@@ -352,8 +352,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       } else {
         dir_sign[0] = 1;
@@ -365,8 +365,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       }
     }
@@ -384,8 +384,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       } else {
         dir_sign[0] = 1;
@@ -397,8 +397,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       }
     } else {
@@ -413,8 +413,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       } else {
         dir_sign[0] = 1;
@@ -426,8 +426,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
             t_out,
             dir_sign,
             isShadowRay,
-            0,
-            numParticles,
+            begin,
+            end,
             args);
       }
     }
@@ -445,8 +445,8 @@ unmasked void PKDGeometry_intersect_packet(
   varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
   uniform PKDGeometry *uniform self =
       (uniform PKDGeometry * uniform) args->geometryUserPtr;
-
-  pkd_traverse_packet(self, *ray, false, args);
+  
+  pkd_traverse_packet(self, *ray, false, 0, self->num_particles, args);
   if (ray->geomID == args->geomID) {
     ray->instID = args->context->instID[0];
   }
@@ -464,7 +464,50 @@ unmasked void PKDGeometry_occluded_packet(
   uniform PKDGeometry *uniform self =
       (uniform PKDGeometry * uniform) args->geometryUserPtr;
 
-  pkd_traverse_packet(self, *ray, true, args);
+  pkd_traverse_packet(self, *ray, true, 0, self->num_particles, args);
+  if (ray->geomID == args->geomID) {
+    ray->instID = args->context->instID[0];
+    ray->t = neg_inf;
+  }
+}
+
+
+
+/*! the 'virtual' traverse function for a pkd geometry */
+unmasked void PKDGeometry_intersect_packet_treelets(
+    const struct RTCIntersectFunctionNArguments *uniform args)
+{
+  if (!args->valid[programIndex]) {
+    return;
+  }
+  // this assumes that the args->rayhit is actually a pointer toa varying ray!
+  varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
+  uniform PKDGeometry *uniform self =
+      (uniform PKDGeometry * uniform) args->geometryUserPtr;
+
+  const uniform PKDTreelet& treelet = self->treelets[args->primID];
+
+  pkd_traverse_packet(self, *ray, false, treelet.begin, treelet.end, args);
+  if (ray->geomID == args->geomID) {
+    ray->instID = args->context->instID[0];
+  }
+}
+
+/*! the 'virtual' occluded function for a pkd geometry */
+unmasked void PKDGeometry_occluded_packet_treelets(
+    const struct RTCIntersectFunctionNArguments *uniform args)
+{
+  if (!args->valid[programIndex]) {
+    return;
+  }
+  // this assumes that the args->rayhit is actually a pointer toa varying ray!
+  varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
+  uniform PKDGeometry *uniform self =
+      (uniform PKDGeometry * uniform) args->geometryUserPtr;
+
+  const uniform PKDTreelet &treelet = self->treelets[args->primID];
+
+  pkd_traverse_packet(self, *ray, true, treelet.begin, treelet.end, args);
   if (ray->geomID == args->geomID) {
     ray->instID = args->context->instID[0];
     ray->t = neg_inf;

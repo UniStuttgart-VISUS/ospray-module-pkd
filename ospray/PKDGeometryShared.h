@@ -21,6 +21,12 @@ namespace ispc {
 //   int32 x,y,z;
 // };
 
+struct PKDTreelet
+{
+  unsigned int begin, end;
+  box3f bounds;
+};
+
 struct PKDGeometry
 {
   // inherit from "Geometry" class: since ISPC doesn't support
@@ -41,6 +47,8 @@ struct PKDGeometry
   unsigned int num_innerNodes;
 
   box3f bounds;
+
+  PKDTreelet* treelets;
 
 #if 0
   //! flag specifying whether this is a quantized version of the particles
