@@ -62,7 +62,7 @@ void PKDGeometry::commit()
   bounds.upper.y = boundsData->as<float>()[4];
   bounds.upper.z = boundsData->as<float>()[5];
 
-  treeletsData = getParamDataT<ispc::PKDTreelet>("treelets");
+  treeletsData = getParamDataT<char>("treelets");
   
   if (treeletsData) {
     createEmbreeUserGeometry(
@@ -82,7 +82,7 @@ void PKDGeometry::commit()
   getSh()->num_particles = num_particles;
   getSh()->num_innerNodes = num_particles / 2;
   getSh()->bounds = bounds;
-  getSh()->treelets = treeletsData ? treeletsData->data() : nullptr;
+  getSh()->treelets = treeletsData ? reinterpret_cast<ispc::PKDTreelet*>(treeletsData->data()) : nullptr;
   getSh()->super.numPrimitives = numPrimitives();
 
   postCreationInfo();

@@ -65,7 +65,7 @@ struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
   Ref<DataT<vec3f> const> positionData;
   Ref<DataT<vec4uc> const> colorData;
 
-  Ref<DataT<ispc::PKDTreelet> const> treeletsData;
+  Ref<DataT<char> const> treeletsData;
 
   unsigned int num_particles;
 
