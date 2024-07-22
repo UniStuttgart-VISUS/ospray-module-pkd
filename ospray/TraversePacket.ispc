@@ -118,7 +118,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   const uniform primID_t numParticles = end - begin;
   const uniform primID_t numInnerNodes = numParticles / 2;
   const uniform PKDParticle *uniform const particle =
-      (PKDParticle * uniform const) self->position;
+      (PKDParticle * uniform const) (self->position + begin);
   // if (dbg) print("ENTER TRAVERSAL\n");
   uniform PKDParticle p;
   while (1) {
@@ -139,7 +139,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         // this is a leaf node - can't to to a leaf, anyway. Intersect
         // the prim, and be done with it.
         // if (dbg) print("LEAFISEC0\n");
-        PKDGeometry_intersectPrim(self, p, nodeID, ray, args);
+        PKDGeometry_intersectPrim(self, p, nodeID + begin, ray, args);
         // if (dbg) print("LEAFISEC1\n");
         // if (dbg) print("LEAFISEC1 % %\n", nodeID, numInnerNodes);
         /*if (dbg)
@@ -258,7 +258,7 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
         /*uniform Particle p;
         getParticle(self, p, stackPtr->sphereID);*/
         uniform PKDParticle p = particle[stackPtr->sphereID];
-        PKDGeometry_intersectPrim(self, p, stackPtr->sphereID, ray, args);
+        PKDGeometry_intersectPrim(self, p, stackPtr->sphereID + begin, ray, args);
         if (isShadowRay && ray.primID >= 0)
           return;
       }
