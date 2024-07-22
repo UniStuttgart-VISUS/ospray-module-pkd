@@ -62,9 +62,18 @@ void PKDGeometry::commit()
   bounds.upper.y = boundsData->as<float>()[4];
   bounds.upper.z = boundsData->as<float>()[5];
 
-  createEmbreeUserGeometry((RTCBoundsFunction)&ispc::PKDGeometry_bounds,
-      (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect,
-      (RTCOccludedFunctionN)&ispc::PKDGeometry_occluded);
+  treeletsData = getParamDataT<ispc::PKDTreelet>("treelets");
+  
+  if (treeletsData) {
+    createEmbreeUserGeometry(
+        (RTCBoundsFunction)&ispc::PKDGeometry_bounds_treelets,
+        (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect_treelets,
+        (RTCOccludedFunctionN)&ispc::PKDGeometry_occluded_treelets);
+  } else {
+    createEmbreeUserGeometry((RTCBoundsFunction)&ispc::PKDGeometry_bounds,
+        (RTCIntersectFunctionN)&ispc::PKDGeometry_intersect,
+        (RTCOccludedFunctionN)&ispc::PKDGeometry_occluded);
+  }
   getSh()->position = positionData->data();
   getSh()->color = has_global_color ? nullptr : colorData->data();
   getSh()->global_radius = global_radius;
@@ -73,6 +82,7 @@ void PKDGeometry::commit()
   getSh()->num_particles = num_particles;
   getSh()->num_innerNodes = num_particles / 2;
   getSh()->bounds = bounds;
+  getSh()->treelets = treeletsData ? treeletsData->data() : nullptr;
   getSh()->super.numPrimitives = numPrimitives();
 
   postCreationInfo();

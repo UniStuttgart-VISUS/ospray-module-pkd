@@ -24,8 +24,8 @@
 #include "rkcommon/math/vec.h"
 
 #include "geometry/Geometry.h"
-//#include "ospray/common/Data.h"
-//#include "ospray/transferFunction/TransferFunction.h"
+// #include "ospray/common/Data.h"
+// #include "ospray/transferFunction/TransferFunction.h"
 
 #include "PKDGeometryShared.h"
 
@@ -41,7 +41,8 @@ struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
   PKDGeometry();
   virtual ~PKDGeometry() = default;
 
-  std::string toString() const override {
+  std::string toString() const override
+  {
     return "ospray::pkd::PKDGeometry";
   }
 
@@ -49,7 +50,11 @@ struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
 
   size_t numPrimitives() const override
   {
-    return positionData ? 1 : 0;
+    if (treeletsData) {
+      return treeletsData->size() / sizeof(ispc::PKDTreelet);
+    } else {
+      return positionData ? 1 : 0;
+    }
   }
 
   /*! return bounding box of particle centers */
@@ -59,7 +64,9 @@ struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
  protected:
   Ref<DataT<vec3f> const> positionData;
   Ref<DataT<vec4uc> const> colorData;
-    
+
+  Ref<DataT<ispc::PKDTreelet> const> treeletsData;
+
   unsigned int num_particles;
 
   float global_radius;
@@ -73,4 +80,4 @@ struct PKDGeometry : public AddStructShared<Geometry, ispc::PKDGeometry>
 };
 
 } // namespace pkd
-} // ::ospray
+} // namespace ospray

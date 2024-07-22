@@ -73,6 +73,28 @@ export void PKDGeometry_occluded(
   PKDGeometry_occluded_packet(args);
 }
 
+export void PKDGeometry_bounds_treelets(const RTCBoundsFunctionArguments *uniform args)
+{
+  uniform PKDGeometry *uniform geom =
+      (uniform PKDGeometry * uniform) args->geometryUserPtr;
+  box3fa *uniform out = (box3fa * uniform) args->bounds_o;
+  *out = make_box3fa(geom->treelets[args->primID].bounds.lower, geom->treelets[args->primID].bounds.upper);
+}
+
+export void PKDGeometry_intersect_treelets(
+    const struct RTCIntersectFunctionNArguments *uniform args)
+{
+  // PKDGeometry_intersect_kernel(args, false);
+  PKDGeometry_intersect_packet_treelets(args);
+}
+
+export void PKDGeometry_occluded_treelets(
+    const struct RTCIntersectFunctionNArguments *uniform args)
+{
+  // PKDGeometry_intersect_kernel(args, true);
+  PKDGeometry_occluded_packet_treelets(args);
+}
+
 export void *uniform PKDGeometry_postIntersect_addr()
 {
   return PKDGeometry_postIntersect;
