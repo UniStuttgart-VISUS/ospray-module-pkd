@@ -110,8 +110,8 @@ inline void pkd_traverse_packet(uniform PKDGeometry *uniform self,
   float t_in = t_in_0;
   float t_out = t_out_0;
   const float radius = self->global_radius;
-  const uniform primID_t numInnerNodes = self->num_innerNodes;
   const uniform primID_t numParticles = self->num_particles;
+  const uniform primID_t numInnerNodes = numParticles / 2;
   const uniform PKDParticle *uniform const particle =
       (PKDParticle * uniform const) self->position;
   //if (dbg) print("ENTER TRAVERSAL\n");
